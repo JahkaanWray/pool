@@ -54,14 +54,13 @@ Vector3 Vector3_normalize(Vector3 v)
     return Vector3_scalar_multiply(v, 1.0 / mag);
 }
 
-int calculate_displacement()
+Vector3 calculate_displacement(Vector3 v)
 {
     double R = 1.0;
     double mu_slide = 0.5;
     double mu_roll = 0.3;
     double g = 9.8;
-    Vector3 v = {20.0, 0.0, 0};
-    Vector3 w = {10.0, 0.0, 0};
+    Vector3 w = {0.0, 0.0, 0};
     Vector3 k = {0, 0, 1};
     Vector3 w_cross_R = Vector3_scalar_multiply(Vector3_cross(w, k), R);
     Vector3 contact_point_v = Vector3_subtract(v, w_cross_R);
@@ -79,7 +78,7 @@ int calculate_displacement()
     printf("Time spent sliding = %f\n", slide_time);
     printf("Time spent rolling = %f\n", roll_time);
     printf("Total displacement = (%f, %f, %f)\n", r.x, r.y, r.z);
-    return 0;
+    return r;
 }
 
 int main(int argc, char *argv[])
@@ -99,8 +98,14 @@ int main(int argc, char *argv[])
                 quit = 1;
             }
         }
+        int *mx, *my;
+        SDL_GetMouseState(mx, my);
+        Vector3 v = {*mx / 10.0, *my / 10.0, 0};
+        Vector3 r = calculate_displacement(v);
         SDL_SetRenderDrawColor(renderer, 0, 180, 0, 255);
         SDL_RenderClear(renderer);
+        SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
+        SDL_RenderDrawLine(renderer, 0, 0, r.x, r.y);
         SDL_RenderPresent(renderer);
     }
     SDL_DestroyRenderer(renderer);
