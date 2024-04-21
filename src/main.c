@@ -5,70 +5,16 @@
 #include <SDL2/SDL.h>
 #include "vector3.h"
 
-double mu_slide = 0.5;
-double mu_roll = 0.3;
+double mu_slide = 3.5;
+double mu_roll = 0.83;
 double g = 9.8;
 double R = 1.0;
-
-typedef struct
-{
-    double x;
-    double y;
-    double z;
-} Vector3;
 
 typedef struct
 {
     Vector3 p1;
     Vector3 p2;
 } LineSegment;
-
-double Vector3_dot(Vector3 v, Vector3 w)
-{
-    return v.x * w.x + v.y * w.y + v.z * w.z;
-}
-
-Vector3 Vector3_scalar_multiply(Vector3 v, double s)
-{
-    Vector3 result = {v.x * s, v.y * s, v.z * s};
-    return result;
-}
-
-Vector3 Vector3_add(Vector3 v, Vector3 w)
-{
-    Vector3 result = {v.x + w.x, v.y + w.y, v.z + w.z};
-    return result;
-}
-
-Vector3 Vector3_subtract(Vector3 v, Vector3 w)
-{
-    Vector3 result = {v.x - w.x, v.y - w.y, v.z - w.z};
-    return result;
-}
-
-Vector3 Vector3_cross(Vector3 v, Vector3 w)
-{
-    Vector3 result = {
-        v.y * w.z - v.z * w.y,
-        v.z * w.x - v.x * w.z,
-        v.x * w.y - v.y * w.x};
-    return result;
-}
-
-double Vector3_mag(Vector3 v)
-{
-    return sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
-}
-
-Vector3 Vector3_normalize(Vector3 v)
-{
-    double mag = Vector3_mag(v);
-    if (mag == 0)
-    {
-        return v;
-    }
-    return Vector3_scalar_multiply(v, 1.0 / mag);
-}
 
 typedef struct
 {
@@ -154,6 +100,33 @@ typedef struct
     int capacity;
 } Path;
 
+void print_path(Path path)
+{
+    for (int i = 0; i < path.num_segments; i++)
+    {
+        PathSegment segment = path.segments[i];
+        printf("Segment %d\n", i);
+        printf("Initial position = (%f, %f, %f)\n", segment.initial_position.x, segment.initial_position.y, segment.initial_position.z);
+        printf("Initial velocity = (%f, %f, %f)\n", segment.initial_velocity.x, segment.initial_velocity.y, segment.initial_velocity.z);
+        printf("Initial angular velocity = (%f, %f, %f)\n", segment.initial_angular_velocity.x, segment.initial_angular_velocity.y, segment.initial_angular_velocity.z);
+        printf("Start time = %f\n", segment.start_time);
+        printf("End time = %f\n", segment.end_time);
+        printf("Rolling = %d\n", segment.rolling);
+        if (segment.rolling)
+        {
+            Vector3 acceleration = Vector3_scalar_multiply(Vector3_normalize(segment.initial_velocity), -mu_roll * g);
+            printf("Acceleration = (%f, %f, %f)\n", acceleration.x, acceleration.y, acceleration.z);
+        }
+        else
+        {
+            Vector3 contact_point_v = Vector3_subtract(segment.initial_velocity, Vector3_cross(segment.initial_angular_velocity, (Vector3){0, 0, R}));
+            Vector3 acceleration = Vector3_scalar_multiply(Vector3_normalize(contact_point_v), -mu_slide * g);
+            printf("Acceleration = (%f, %f, %f)\n", acceleration.x, acceleration.y, acceleration.z);
+        }
+        printf("\n\n\n\n");
+    }
+}
+
 Path new_path()
 {
     Path path;
@@ -179,7 +152,7 @@ void free_path(Path *path)
     free(path->segments);
 }
 
-bool detect_collision(PathSegment *segment, LineSegment line_segment, double *t)
+bool detect_collision_with_line_segment(PathSegment *segment, LineSegment line_segment, double *t)
 {
     double collision_time;
     Vector3 p1 = segment->initial_position;
@@ -207,7 +180,6 @@ bool detect_collision(PathSegment *segment, LineSegment line_segment, double *t)
             return false;
         }
         *t = collision_time;
-        segment->end_time = collision_time;
         return true;
     }
     double discriminant = vn * vn + 2 * an * sn;
@@ -242,30 +214,59 @@ bool detect_collision(PathSegment *segment, LineSegment line_segment, double *t)
         collision_time = fmin(collision_time1, collision_time2);
     }
     *t = collision_time;
-    segment->end_time = collision_time;
     return true;
 }
+bool detect_collision(PathSegment *segment, LineSegment line_segments[], double *t, LineSegment *cushion)
+{
+    double first_collision_time = INFINITY;
+    for (int i = 0; i < 4; i++)
+    {
+        double collision_time;
 
-bool update_path(Path *path, LineSegment line_segment)
+        if (detect_collision_with_line_segment(segment, line_segments[i], &collision_time))
+        {
+            printf("Possible collision detected with cushion %d at t = %f\n", i, collision_time);
+            if (collision_time < first_collision_time || i == 0)
+            {
+                first_collision_time = collision_time;
+                *cushion = line_segments[i];
+            }
+        }
+    }
+
+    if (first_collision_time < segment->end_time && first_collision_time > segment->start_time)
+    {
+        *t = first_collision_time;
+        printf("Collision detected with cushion\n");
+        return true;
+    }
+    return false;
+}
+
+bool update_path(Path *path, LineSegment line_segments[])
 {
     printf("Updating path\n");
     if (path->num_segments == 0)
     {
         return false;
     }
-    PathSegment last_segment = path->segments[path->num_segments - 1];
+    PathSegment *last_segment = &(path->segments[path->num_segments - 1]);
     double collision_time;
+    LineSegment cushion;
     printf("Checking for collision\n");
-    if (detect_collision(&last_segment, line_segment, &collision_time))
+    if (detect_collision(last_segment, line_segments, &collision_time, &cushion))
     {
-        Vector3 line_normal = Vector3_normalize(Vector3_cross(Vector3_subtract(line_segment.p2, line_segment.p1), (Vector3){0, 0, 1}));
-        Vector3 collision_position = get_position(last_segment, collision_time);
-        Vector3 collision_velocity = get_velocity(last_segment, collision_time);
-        Vector3 collision_angular_velocity = get_angular_velocity(last_segment, collision_time);
+
+        Vector3 line_normal = Vector3_normalize(Vector3_cross(Vector3_subtract(cushion.p2, cushion.p1), (Vector3){0, 0, 1}));
+        Vector3 collision_position = get_position(*last_segment, collision_time);
+        Vector3 collision_velocity = get_velocity(*last_segment, collision_time);
+        Vector3 collision_angular_velocity = get_angular_velocity(*last_segment, collision_time);
         Vector3 new_velocity = Vector3_subtract(collision_velocity, Vector3_scalar_multiply(line_normal, 2 * Vector3_dot(collision_velocity, line_normal)));
+        last_segment->end_time = collision_time;
         bool rolling = false;
         double start_time = collision_time;
-        double end_time = start_time + 2 * Vector3_mag(collision_velocity) / (7 * mu_slide * g);
+        Vector3 contact_point_v = Vector3_subtract(new_velocity, Vector3_cross(collision_angular_velocity, (Vector3){0, 0, R}));
+        double end_time = start_time + 2 * Vector3_mag(contact_point_v) / (7 * mu_slide * g);
         PathSegment next_segment = {collision_position, new_velocity, collision_angular_velocity, rolling, start_time, end_time};
         add_segment(path, next_segment);
         printf("Collision detected\n");
@@ -274,38 +275,31 @@ bool update_path(Path *path, LineSegment line_segment)
         printf("Collision velocity = (%f, %f, %f)\n", collision_velocity.x, collision_velocity.y, collision_velocity.z);
         printf("Collision angular velocity = (%f, %f, %f)\n", collision_angular_velocity.x, collision_angular_velocity.y, collision_angular_velocity.z);
         printf("New velocity = (%f, %f, %f)\n", new_velocity.x, new_velocity.y, new_velocity.z);
-        for (int i = 0; i < path->num_segments; i++)
-        {
-            PathSegment segment = path->segments[i];
-            printf("Segment %d\n", i);
-            printf("Initial position = (%f, %f, %f)\n", segment.initial_position.x, segment.initial_position.y, segment.initial_position.z);
-            printf("Initial velocity = (%f, %f, %f)\n", segment.initial_velocity.x, segment.initial_velocity.y, segment.initial_velocity.z);
-            printf("Initial angular velocity = (%f, %f, %f)\n", segment.initial_angular_velocity.x, segment.initial_angular_velocity.y, segment.initial_angular_velocity.z);
-            printf("Start time = %f\n", segment.start_time);
-            printf("End time = %f\n", segment.end_time);
-            printf("\n\n\n\n");
-        }
+
+        print_path(*path);
+
         return true;
     }
     printf("No collision detected\n");
-    if (last_segment.rolling)
+    if (last_segment->rolling)
     {
         printf("Last segment is rolling\nPath finished\n");
         return false;
     }
     printf("Last segment is sliding\nAdding rolling segment\n");
-    Vector3 last_position = get_position(last_segment, last_segment.end_time);
-    Vector3 last_velocity = get_velocity(last_segment, last_segment.end_time);
-    Vector3 last_angular_velocity = get_angular_velocity(last_segment, last_segment.end_time);
+    Vector3 last_position = get_position(*last_segment, last_segment->end_time);
+    Vector3 last_velocity = get_velocity(*last_segment, last_segment->end_time);
+    Vector3 last_angular_velocity = get_angular_velocity(*last_segment, last_segment->end_time);
     bool rolling = true;
-    double start_time = last_segment.end_time;
+    double start_time = last_segment->end_time;
     double end_time = start_time + Vector3_mag(last_velocity) / (mu_roll * g);
     PathSegment next_segment = {last_position, last_velocity, last_angular_velocity, rolling, start_time, end_time};
     add_segment(path, next_segment);
+    print_path(*path);
     return true;
 }
 
-void generate_path(Path *path, Vector3 initial_position, Vector3 initial_velocity, Vector3 initial_angular_velocity, bool rolling, double start_time, LineSegment line_segment)
+void generate_path(Path *path, Vector3 initial_position, Vector3 initial_velocity, Vector3 initial_angular_velocity, bool rolling, double start_time, LineSegment line_segments[])
 {
     double end_time;
     if (rolling)
@@ -320,7 +314,7 @@ void generate_path(Path *path, Vector3 initial_position, Vector3 initial_velocit
     }
     PathSegment segment = {initial_position, initial_velocity, initial_angular_velocity, rolling, start_time, end_time};
     add_segment(path, segment);
-    while (update_path(path, line_segment))
+    while (update_path(path, line_segments))
         ;
 }
 
@@ -347,45 +341,13 @@ void render_path_segment(SDL_Renderer *renderer, PathSegment segment)
     }
 }
 
-Vector3 render_path(SDL_Renderer *renderer, Path path)
+void render_path(SDL_Renderer *renderer, Path path)
 {
     for (int i = 0; i < path.num_segments; i++)
     {
         PathSegment segment = path.segments[i];
         render_path_segment(renderer, segment);
     }
-    /*
-    Vector3 k = {0, 0, 1};
-    Vector3 w_cross_R = Vector3_scalar_multiply(Vector3_cross(w, k), R);
-    Vector3 contact_point_v = Vector3_subtract(v, w_cross_R);
-    Vector3 contact_point_v_normalized = Vector3_normalize(contact_point_v);
-    Vector3 v_roll = Vector3_add(Vector3_scalar_multiply(v, 5.0 / 7.0), Vector3_scalar_multiply(w_cross_R, 2.0 / 7.0));
-    Vector3 v_roll_normalized = Vector3_normalize(v_roll);
-    double slide_time = 2 * Vector3_mag(contact_point_v) / (7 * mu_slide * g);
-    double roll_time = Vector3_mag(v_roll) / (mu_roll * g);
-    for (int i = 0; i < 100; i++)
-    {
-        double t1 = i * slide_time / 100;
-        double t2 = (i + 1) * slide_time / 100;
-
-        Vector3 p1 = Vector3_subtract(Vector3_scalar_multiply(v, t1), Vector3_scalar_multiply(contact_point_v_normalized, 0.5 * mu_slide * g * t1 * t1));
-        Vector3 p2 = Vector3_subtract(Vector3_scalar_multiply(v, t2), Vector3_scalar_multiply(contact_point_v_normalized, 0.5 * mu_slide * g * t2 * t2));
-        SDL_RenderDrawLine(renderer, p1.x, p1.y, p2.x, p2.y);
-    }
-    Vector3 r_slide = Vector3_subtract(Vector3_scalar_multiply(v, slide_time), Vector3_scalar_multiply(contact_point_v_normalized, 0.5 * mu_slide * g * slide_time * slide_time));
-    Vector3 r_roll = Vector3_subtract(Vector3_scalar_multiply(v_roll, roll_time), Vector3_scalar_multiply(v_roll_normalized, 0.5 * mu_roll * g * roll_time * roll_time));
-
-    Vector3 r = Vector3_add(r_slide, r_roll);
-
-    SDL_RenderDrawLine(renderer, r_slide.x, r_slide.y, r.x, r.y);
-
-    printf("Contact point velocity = (%f, %f, %f)\n", contact_point_v.x, contact_point_v.y, contact_point_v.z);
-    printf("Time spent sliding = %f\n", slide_time);
-    printf("Time spent rolling = %f\n", roll_time);
-    printf("Total displacement = (%f, %f, %f)\n", r.x, r.y, r.z);
-    */
-    Vector3 r = {0, 0, 0};
-    return r;
 }
 
 int main(int argc, char *argv[])
@@ -399,7 +361,7 @@ int main(int argc, char *argv[])
     int v_mag = 1;
     int w_mag = 1;
 
-    LineSegment cushion = {{800, 100, 0}, {800, 800, 0}};
+    LineSegment cushions[4] = {{{100, 100, 0}, {800, 100, 0}}, {{800, 100, 0}, {800, 800, 0}}, {{800, 800, 0}, {100, 800, 0}}, {{100, 800, 0}, {100, 100, 0}}};
 
     bool quit = 0;
     SDL_Event event;
@@ -449,10 +411,13 @@ int main(int argc, char *argv[])
         SDL_RenderDrawLine(renderer, 50, 850, 50 + 50 * w.x, 850 + 50 * w.y);
 
         Path path = new_path();
-        generate_path(&path, (Vector3){100, 100, 0}, Vector3_scalar_multiply(v, v_mag), Vector3_scalar_multiply(w, w_mag), false, 0, cushion);
+        generate_path(&path, (Vector3){500, 300, 0}, Vector3_scalar_multiply(v, v_mag), Vector3_scalar_multiply(w, w_mag), false, 0, cushions);
         render_path(renderer, path);
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-        SDL_RenderDrawLine(renderer, cushion.p1.x, cushion.p1.y, cushion.p2.x, cushion.p2.y);
+        for (int i = 0; i < 4; i++)
+        {
+            SDL_RenderDrawLine(renderer, cushions[i].p1.x, cushions[i].p1.y, cushions[i].p2.x, cushions[i].p2.y);
+        }
         SDL_RenderPresent(renderer);
     }
     SDL_DestroyRenderer(renderer);
