@@ -5,6 +5,7 @@
 #include <SDL2/SDL.h>
 #include <complex.h>
 #include "vector3.h"
+#include "polynomial.h"
 
 double mu_slide = 3.5;
 double mu_roll = 0.83;
@@ -226,7 +227,6 @@ bool detect_collision(PathSegment *segment, LineSegment line_segments[], double 
 
         if (detect_collision_with_line_segment(segment, line_segments[i], &collision_time))
         {
-            printf("Possible collision detected with cushion %d at t = %f\n", i, collision_time);
             if (collision_time < first_collision_time || i == 0)
             {
                 first_collision_time = collision_time;
@@ -238,7 +238,6 @@ bool detect_collision(PathSegment *segment, LineSegment line_segments[], double 
     if (first_collision_time < segment->end_time && first_collision_time > segment->start_time)
     {
         *t = first_collision_time;
-        printf("Collision detected with cushion\n");
         return true;
     }
     return false;
@@ -246,7 +245,6 @@ bool detect_collision(PathSegment *segment, LineSegment line_segments[], double 
 
 bool update_path(Path *path, LineSegment line_segments[])
 {
-    printf("Updating path\n");
     if (path->num_segments == 0)
     {
         return false;
@@ -254,7 +252,6 @@ bool update_path(Path *path, LineSegment line_segments[])
     PathSegment *last_segment = &(path->segments[path->num_segments - 1]);
     double collision_time;
     LineSegment cushion;
-    printf("Checking for collision\n");
     if (detect_collision(last_segment, line_segments, &collision_time, &cushion))
     {
 
@@ -270,24 +267,13 @@ bool update_path(Path *path, LineSegment line_segments[])
         double end_time = start_time + 2 * Vector3_mag(contact_point_v) / (7 * mu_slide * g);
         PathSegment next_segment = {collision_position, new_velocity, collision_angular_velocity, rolling, start_time, end_time};
         add_segment(path, next_segment);
-        printf("Collision detected\n");
-        printf("Collition time = %f\n", collision_time);
-        printf("Collision position = (%f, %f, %f)\n", collision_position.x, collision_position.y, collision_position.z);
-        printf("Collision velocity = (%f, %f, %f)\n", collision_velocity.x, collision_velocity.y, collision_velocity.z);
-        printf("Collision angular velocity = (%f, %f, %f)\n", collision_angular_velocity.x, collision_angular_velocity.y, collision_angular_velocity.z);
-        printf("New velocity = (%f, %f, %f)\n", new_velocity.x, new_velocity.y, new_velocity.z);
-
-        print_path(*path);
 
         return true;
     }
-    printf("No collision detected\n");
     if (last_segment->rolling)
     {
-        printf("Last segment is rolling\nPath finished\n");
         return false;
     }
-    printf("Last segment is sliding\nAdding rolling segment\n");
     Vector3 last_position = get_position(*last_segment, last_segment->end_time);
     Vector3 last_velocity = get_velocity(*last_segment, last_segment->end_time);
     Vector3 last_angular_velocity = get_angular_velocity(*last_segment, last_segment->end_time);
@@ -296,7 +282,6 @@ bool update_path(Path *path, LineSegment line_segments[])
     double end_time = start_time + Vector3_mag(last_velocity) / (mu_roll * g);
     PathSegment next_segment = {last_position, last_velocity, last_angular_velocity, rolling, start_time, end_time};
     add_segment(path, next_segment);
-    print_path(*path);
     return true;
 }
 
@@ -351,6 +336,67 @@ void render_path(SDL_Renderer *renderer, Path path)
     }
 }
 
+void solve_for_initial_conditions(Vector3 initial_position, Vector3 target_position, Vector3 v_roll, Vector3 *v, Vector3 *w)
+{
+
+    Vector3 roll_position = Vector3_subtract(target_position, Vector3_scalar_multiply(v_roll, Vector3_mag(v_roll) / (2 * mu_roll * g)));
+    printf("Ball must start rolling at ");
+    Vector3_print(roll_position);
+
+    double a = 0.25 * mu_slide * mu_slide * g * g;
+    double b = 0;
+    double c = -Vector3_mag(v_roll) * Vector3_mag(v_roll);
+    double d = 2 * v_roll.x * (roll_position.x - initial_position.x) + 2 * v_roll.y * (roll_position.y - initial_position.y);
+    double e = -(initial_position.x - roll_position.x) * (initial_position.x - roll_position.x) - (initial_position.y - roll_position.y) * (initial_position.y - roll_position.y);
+
+    double x1, x2, x3, x4;
+    solve_quartic(a, b, c, d, e, &x1, &x2, &x3, &x4);
+    printf("%f %f %f %f\n", x1, x2, x3, x4);
+    // Find smallest root greater than zero
+    double t = INFINITY;
+    if (x1 > 0 && x1 < t)
+    {
+        t = x1;
+    }
+    if (x2 > 0 && x2 < t)
+    {
+        t = x2;
+    }
+    if (x3 > 0 && x3 < t)
+    {
+        t = x3;
+    }
+    if (x4 > 0 && x4 < t)
+    {
+        t = x4;
+    }
+    printf("%f\n", t);
+    printf("Not accounting for acceleration the ball would be at ");
+    Vector3_print(Vector3_subtract(roll_position, Vector3_scalar_multiply(v_roll, t)));
+    printf("Acceleration must cause ball to travel ");
+    Vector3_print(Vector3_subtract(Vector3_subtract(roll_position, Vector3_scalar_multiply(v_roll, t)), initial_position));
+    Vector3 required_acceleration = Vector3_add(Vector3_subtract(initial_position, roll_position), Vector3_scalar_multiply(v_roll, t));
+    required_acceleration = Vector3_scalar_multiply(Vector3_normalize(required_acceleration), mu_slide * g);
+    printf("Acceleration must be ");
+    Vector3_print(Vector3_normalize(required_acceleration));
+
+    printf("Initial velocity must be ");
+    Vector3 required_velocity = Vector3_subtract(v_roll, Vector3_scalar_multiply(required_acceleration, t));
+    Vector3_print(required_velocity);
+    *v = required_velocity;
+
+    Vector3 required_angular_acceleration = Vector3_cross(required_acceleration, (Vector3){0, 0, -1});
+    printf("Required angular  acceleration : ");
+    Vector3_print(required_angular_acceleration);
+    required_angular_acceleration = Vector3_scalar_multiply(required_angular_acceleration, -2.5 / R);
+    Vector3 w_roll = Vector3_cross(v_roll, (Vector3){0, 0, -1 / R});
+    printf("Angular velocity when ball starts rolling is ");
+    Vector3_print(w_roll);
+    Vector3 required_angular_velocity = Vector3_subtract(w_roll, Vector3_scalar_multiply(required_angular_acceleration, t));
+
+    *w = required_angular_velocity;
+}
+
 int main(int argc, char *argv[])
 {
     SDL_Init(SDL_INIT_VIDEO);
@@ -361,6 +407,24 @@ int main(int argc, char *argv[])
     Vector3 w = {0, 1, 0};
     int v_mag = 1;
     int w_mag = 1;
+
+    Vector3 initial_position = {500, 300, 0};
+    printf("Initial position = ");
+    Vector3_print(initial_position);
+    Vector3 target_position = {700, 500, 0};
+    printf("Target position = ");
+    Vector3_print(target_position);
+
+    Vector3 v_roll = {20, 0, 0};
+
+    Vector3 required_velocity;
+    Vector3 required_angular_velocity;
+    solve_for_initial_conditions(initial_position, target_position, v_roll, &required_velocity, &required_angular_velocity);
+
+    v = Vector3_normalize(required_velocity);
+    w = Vector3_normalize(required_angular_velocity);
+    v_mag = Vector3_mag(required_velocity);
+    w_mag = Vector3_mag(required_angular_velocity);
 
     LineSegment cushions[4] = {{{100, 100, 0}, {800, 100, 0}}, {{800, 100, 0}, {800, 800, 0}}, {{800, 800, 0}, {100, 800, 0}}, {{100, 800, 0}, {100, 100, 0}}};
 
@@ -378,7 +442,7 @@ int main(int argc, char *argv[])
             {
                 int mx, my;
                 Uint32 mouseState = SDL_GetMouseState(&mx, &my);
-                if (mx > 1450 && mx < 1530 && my > 10 && my < 890)
+                /*if (mx > 1450 && mx < 1530 && my > 10 && my < 890)
                 {
                     v_mag = 890 - my;
                 }
@@ -393,7 +457,15 @@ int main(int argc, char *argv[])
                 if (mx > 0 && mx < 100 && my > 800 && my < 900)
                 {
                     w = Vector3_normalize((Vector3){mx - 50, my - 850, 0});
-                }
+                }*/
+                target_position = (Vector3){mx, my, 0};
+                Vector3 required_velocity;
+                Vector3 required_angular_velocity;
+                solve_for_initial_conditions(initial_position, target_position, v_roll, &required_velocity, &required_angular_velocity);
+                v = Vector3_normalize(required_velocity);
+                w = Vector3_normalize(required_angular_velocity);
+                v_mag = Vector3_mag(required_velocity);
+                w_mag = Vector3_mag(required_angular_velocity);
             }
         }
 
@@ -419,6 +491,12 @@ int main(int argc, char *argv[])
         {
             SDL_RenderDrawLine(renderer, cushions[i].p1.x, cushions[i].p1.y, cushions[i].p2.x, cushions[i].p2.y);
         }
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+        SDL_RenderFillRect(renderer, &(SDL_Rect){initial_position.x - 5, initial_position.y - 5, 10, 10});
+        SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
+        SDL_RenderFillRect(renderer, &(SDL_Rect){target_position.x - 5, target_position.y - 5, 10, 10});
+        SDL_SetRenderDrawColor(renderer, 0, 0, 255, 255);
+        SDL_RenderDrawLine(renderer, initial_position.x, initial_position.y, initial_position.x + required_velocity.x, initial_position.y + required_velocity.y);
         SDL_RenderPresent(renderer);
     }
     SDL_DestroyRenderer(renderer);
