@@ -3,7 +3,10 @@
 #include <stdio.h>
 #include <math.h>
 #include <SDL2/SDL.h>
+#include <complex.h>
 #include "vector3.h"
+
+double complex i = 2 + 3 * I;
 
 double mu_slide = 3.5;
 double mu_roll = 0.83;
