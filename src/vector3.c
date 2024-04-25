@@ -1,4 +1,5 @@
 #include <math.h>
+#include <stdio.h>
 #include "vector3.h"
 
 void Vector3_print(Vector3 v)
