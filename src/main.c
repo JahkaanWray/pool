@@ -6,8 +6,6 @@
 #include <complex.h>
 #include "vector3.h"
 
-double complex i = 2 + 3 * I;
-
 double mu_slide = 3.5;
 double mu_roll = 0.83;
 double g = 9.8;
