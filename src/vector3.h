@@ -7,6 +7,8 @@ typedef struct
     float z;
 } Vector3;
 
+void Vector3_print(Vector3 v);
+
 double Vector3_dot(Vector3 v, Vector3 w);
 
 Vector3 Vector3_scalar_multiply(Vector3 v, double s);

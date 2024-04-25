@@ -1,6 +1,11 @@
 #include <math.h>
 #include "vector3.h"
 
+void Vector3_print(Vector3 v)
+{
+    printf("(%f, %f, %f)\n", v.x, v.y, v.z);
+}
+
 double Vector3_dot(Vector3 v, Vector3 w)
 {
     return v.x * w.x + v.y * w.y + v.z * w.z;
