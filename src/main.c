@@ -449,11 +449,101 @@ void solve_one_cushion_shot(Vector3 initial_position, Vector3 target_position, V
     }
 }
 
+Table new_table()
+{
+    Table table;
+    table.cushions = malloc(4 * sizeof(LineSegment));
+    table.num_cushions = 4;
+    table.cushion_capacity = 4;
+    table.cushions[0] = (LineSegment){{100, 100, 0}, {800, 100, 0}};
+    table.cushions[1] = (LineSegment){{800, 100, 0}, {800, 800, 0}};
+    table.cushions[2] = (LineSegment){{800, 800, 0}, {100, 800, 0}};
+    table.cushions[3] = (LineSegment){{100, 800, 0}, {100, 100, 0}};
+    return table;
+}
+
+void render_table(SDL_Renderer *renderer, Table table)
+{
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    for (int i = 0; i < table.num_cushions; i++)
+    {
+        LineSegment cushion = table.cushions[i];
+        SDL_RenderDrawLine(renderer, cushion.p1.x, cushion.p1.y, cushion.p2.x, cushion.p2.y);
+    }
+}
+
+BallSet empty_ball_set()
+{
+    BallSet ball_set;
+    ball_set.balls = malloc(10 * sizeof(Ball));
+    ball_set.num_balls = 0;
+    ball_set.ball_capacity = 10;
+    return ball_set;
+}
+
+BallSet standard_ball_set()
+{
+    BallSet ball_set;
+    ball_set.balls = malloc(10 * sizeof(Ball));
+    ball_set.num_balls = 10;
+    ball_set.ball_capacity = 10;
+    for (int i = 0; i < 10; i++)
+    {
+        Ball ball;
+        ball.initial_position = (Vector3){500, 200 + 50 * i, 0};
+        ball.colour = 0x110000 * i + 0x000011 * (9 - i);
+        ball.radius = 10;
+        ball.mass = 1;
+        ball.path = new_path();
+        ball_set.balls[i] = ball;
+    }
+    return ball_set;
+}
+
+void free_ball_set(BallSet *ball_set)
+{
+    for (int i = 0; i < ball_set->num_balls; i++)
+    {
+        free_path(&(ball_set->balls[i].path));
+    }
+    free(ball_set->balls);
+}
+
+void render_ball(SDL_Renderer *renderer, Ball ball)
+{
+    SDL_SetRenderDrawColor(renderer, (ball.colour >> 16) & 0xFF, (ball.colour >> 8) & 0xFF, ball.colour & 0xFF, 255);
+    SDL_RenderFillRect(renderer, &(SDL_Rect){ball.initial_position.x - ball.radius, ball.initial_position.y - ball.radius, 2 * ball.radius, 2 * ball.radius});
+}
+
+void render_ball_set(SDL_Renderer *renderer, BallSet ball_set)
+{
+    for (int i = 0; i < ball_set.num_balls; i++)
+    {
+        render_ball(renderer, ball_set.balls[i]);
+    }
+}
+
+void render_scene(SDL_Renderer *renderer, Scene scene)
+{
+    render_table(renderer, scene.table);
+    render_ball_set(renderer, scene.ball_set);
+}
+
+Scene new_scene()
+{
+    Scene scene;
+    scene.table = new_table();
+    scene.ball_set = standard_ball_set();
+    return scene;
+}
+
 int main(int argc, char *argv[])
 {
     SDL_Init(SDL_INIT_VIDEO);
     SDL_Window *window = SDL_CreateWindow("SDL2 Window", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 1640, 900, 0);
     SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+
+    Scene scene = new_scene();
 
     Vector3 v = {1, 0, 0};
     Vector3 w = {0, 1, 0};
@@ -468,8 +558,6 @@ int main(int argc, char *argv[])
     Vector3_print(target_position);
 
     Vector3 v_roll = {0, 50, 0};
-
-    LineSegment cushions[4] = {{{100, 100, 0}, {800, 100, 0}}, {{800, 100, 0}, {800, 800, 0}}, {{800, 800, 0}, {100, 800, 0}}, {{100, 800, 0}, {100, 100, 0}}};
 
     int mode = 0;
 
@@ -547,13 +635,8 @@ int main(int argc, char *argv[])
         SDL_RenderDrawLine(renderer, 50, 850, 50 + 50 * w.x, 850 + 50 * w.y);
 
         Path path = new_path();
-        generate_path(&path, initial_position, Vector3_scalar_multiply(v, v_mag), Vector3_scalar_multiply(w, w_mag), false, 0, cushions);
+        generate_path(&path, initial_position, Vector3_scalar_multiply(v, v_mag), Vector3_scalar_multiply(w, w_mag), false, 0, scene.table.cushions);
         render_path(renderer, path);
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-        for (int i = 0; i < 4; i++)
-        {
-            SDL_RenderDrawLine(renderer, cushions[i].p1.x, cushions[i].p1.y, cushions[i].p2.x, cushions[i].p2.y);
-        }
         SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
         SDL_RenderFillRect(renderer, &(SDL_Rect){initial_position.x - 5, initial_position.y - 5, 10, 10});
         SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
@@ -563,7 +646,7 @@ int main(int argc, char *argv[])
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
         SDL_RenderDrawLine(renderer, initial_position.x, initial_position.y, initial_position.x + v_mag * v.x, initial_position.y + v_mag * v.y);
         SDL_RenderDrawLine(renderer, initial_position.x, initial_position.y, initial_position.x + w_mag * w.x, initial_position.y + w_mag * w.y);
-        Vector3 cushion_normal = Vector3_normalize(Vector3_cross(Vector3_subtract(cushions[0].p2, cushions[0].p1), (Vector3){0, 0, 1}));
+        Vector3 cushion_normal = Vector3_normalize(Vector3_cross(Vector3_subtract(scene.table.cushions[0].p2, scene.table.cushions[0].p1), (Vector3){0, 0, 1}));
         Vector3 velocity_before_collision = Vector3_subtract(Vector3_scalar_multiply(v, v_mag), Vector3_scalar_multiply(cushion_normal, 2 * v_mag * Vector3_dot(v, cushion_normal)));
         Vector3 v_cp_before = Vector3_subtract(velocity_before_collision, Vector3_cross(Vector3_scalar_multiply(w, w_mag), (Vector3){0, 0, R}));
         Vector3 acceleration = Vector3_scalar_multiply(Vector3_normalize(v_cp_before), -mu_slide * g);
@@ -576,6 +659,8 @@ int main(int argc, char *argv[])
             Vector3 p2 = Vector3_add(Vector3_add(initial_position, Vector3_scalar_multiply(velocity_before_collision, -t2)), Vector3_scalar_multiply(acceleration, 0.5 * t2 * t2));
             SDL_RenderDrawLine(renderer, p1.x, p1.y, p2.x, p2.y);
         }
+
+        render_scene(renderer, scene);
 
         SDL_RenderPresent(renderer);
     }
