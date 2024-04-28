@@ -28,6 +28,41 @@ typedef struct
     double end_time;
 } PathSegment;
 
+typedef struct
+{
+    LineSegment *cushions;
+    int num_cushions;
+    int cushion_capacity;
+} Table;
+
+typedef struct
+{
+    PathSegment *segments;
+    int num_segments;
+    int capacity;
+} Path;
+
+typedef struct
+{
+    Vector3 initial_position;
+    long colour;
+    double radius;
+    double mass;
+    Path path;
+} Ball;
+
+typedef struct
+{
+    Ball *balls;
+    int num_balls;
+    int ball_capacity;
+} BallSet;
+typedef struct
+{
+    Table table;
+    BallSet ball_set;
+} Scene;
+
 Vector3 get_position(PathSegment segment, double time)
 {
     if (time < segment.start_time)
@@ -95,13 +130,6 @@ Vector3 get_angular_velocity(PathSegment segment, double time)
         return Vector3_scalar_multiply(Vector3_cross(get_velocity(segment, time), (Vector3){0, 0, -1}), 1 / R);
     }
 }
-typedef struct
-{
-    PathSegment *segments;
-    int num_segments;
-    int capacity;
-} Path;
-
 void print_path(Path path)
 {
     for (int i = 0; i < path.num_segments; i++)
@@ -336,14 +364,19 @@ void render_path(SDL_Renderer *renderer, Path path)
     }
 }
 
-void solve_direct_shot_sliding(Vector3 initial_position, Vector3 target_position, Vector3 target_velocity, Vector3 target_angular_velocity, Vector3 *v, Vector3 *w)
+void solve_direct_shot(Vector3 initial_position, Vector3 target_position, Vector3 v_roll, Vector3 *v, Vector3 *w)
 {
+
+    Vector3 roll_position = Vector3_subtract(target_position, Vector3_scalar_multiply(v_roll, Vector3_mag(v_roll) / (2 * mu_roll * g)));
+    Vector3 w_roll = Vector3_cross(v_roll, (Vector3){0, 0, -1 / R});
+    printf("Ball must start rolling at ");
+    Vector3_print(roll_position);
 
     double a = 0.25 * mu_slide * mu_slide * g * g;
     double b = 0;
-    double c = -Vector3_mag(target_velocity) * Vector3_mag(target_velocity);
-    double d = 2 * target_velocity.x * (target_position.x - initial_position.x) + 2 * target_velocity.y * (target_position.y - initial_position.y);
-    double e = -(initial_position.x - target_position.x) * (initial_position.x - target_position.x) - (initial_position.y - target_position.y) * (initial_position.y - target_position.y);
+    double c = -Vector3_mag(v_roll) * Vector3_mag(v_roll);
+    double d = 2 * v_roll.x * (roll_position.x - initial_position.x) + 2 * v_roll.y * (roll_position.y - initial_position.y);
+    double e = -(initial_position.x - roll_position.x) * (initial_position.x - roll_position.x) - (initial_position.y - roll_position.y) * (initial_position.y - roll_position.y);
 
     double x1, x2, x3, x4;
     solve_quartic(a, b, c, d, e, &x1, &x2, &x3, &x4);
@@ -368,16 +401,16 @@ void solve_direct_shot_sliding(Vector3 initial_position, Vector3 target_position
     }
     printf("%f\n", t);
     printf("Not accounting for acceleration the ball would be at ");
-    Vector3_print(Vector3_subtract(target_position, Vector3_scalar_multiply(target_velocity, t)));
+    Vector3_print(Vector3_subtract(roll_position, Vector3_scalar_multiply(v_roll, t)));
     printf("Acceleration must cause ball to travel ");
-    Vector3_print(Vector3_subtract(Vector3_subtract(target_position, Vector3_scalar_multiply(target_velocity, t)), initial_position));
-    Vector3 required_acceleration = Vector3_add(Vector3_subtract(initial_position, target_position), Vector3_scalar_multiply(target_velocity, t));
+    Vector3_print(Vector3_subtract(Vector3_subtract(roll_position, Vector3_scalar_multiply(v_roll, t)), initial_position));
+    Vector3 required_acceleration = Vector3_add(Vector3_subtract(initial_position, roll_position), Vector3_scalar_multiply(v_roll, t));
     required_acceleration = Vector3_scalar_multiply(Vector3_normalize(required_acceleration), mu_slide * g);
     printf("Acceleration must be ");
     Vector3_print(Vector3_normalize(required_acceleration));
 
     printf("Initial velocity must be ");
-    Vector3 required_velocity = Vector3_subtract(target_velocity, Vector3_scalar_multiply(required_acceleration, t));
+    Vector3 required_velocity = Vector3_subtract(v_roll, Vector3_scalar_multiply(required_acceleration, t));
     Vector3_print(required_velocity);
     *v = required_velocity;
 
@@ -386,19 +419,12 @@ void solve_direct_shot_sliding(Vector3 initial_position, Vector3 target_position
     Vector3_print(required_angular_acceleration);
     required_angular_acceleration = Vector3_scalar_multiply(required_angular_acceleration, -2.5 / R);
     printf("Angular velocity when ball starts rolling is ");
-    Vector3_print(target_angular_velocity);
-    Vector3 required_angular_velocity = Vector3_subtract(target_angular_velocity, Vector3_scalar_multiply(required_angular_acceleration, t));
+    Vector3_print(w_roll);
+    Vector3 required_angular_velocity = Vector3_subtract(w_roll, Vector3_scalar_multiply(required_angular_acceleration, t));
 
     *w = required_angular_velocity;
 }
 
-void solve_direct_shot(Vector3 initial_position, Vector3 target_position, Vector3 v_roll, Vector3 *v, Vector3 *w)
-{
-
-    Vector3 roll_position = Vector3_subtract(target_position, Vector3_scalar_multiply(v_roll, Vector3_mag(v_roll) / (2 * mu_roll * g)));
-    Vector3 w_roll = Vector3_cross(v_roll, (Vector3){0, 0, -1 / R});
-    solve_direct_shot_sliding(initial_position, roll_position, v_roll, w_roll, v, w);
-}
 void solve_one_cushion_shot(Vector3 initial_position, Vector3 target_position, Vector3 v_roll, LineSegment cushion, Vector3 *v, Vector3 *w)
 {
     Vector3 cushion_tangent = Vector3_normalize(Vector3_subtract(cushion.p2, cushion.p1));
@@ -408,8 +434,18 @@ void solve_one_cushion_shot(Vector3 initial_position, Vector3 target_position, V
     while (cushion_coord < cushion_length)
     {
         cushion_contact_point = Vector3_add(cushion.p1, Vector3_scalar_multiply(cushion_tangent, cushion_coord));
-        solve_direct_shot(cushion_contact_point, target_position, v_roll, v, w);
-        cushion_coord += 0.1;
+        Vector3 v_after_collision;
+        Vector3 w_after_collision;
+        solve_direct_shot(cushion_contact_point, target_position, v_roll, &v_after_collision, &w_after_collision);
+        Vector3 v_normal = Vector3_subtract(v_after_collision, Vector3_scalar_multiply(cushion_tangent, Vector3_dot(v_after_collision, cushion_tangent)));
+        Vector3 v_before_collision = Vector3_subtract(v_after_collision, Vector3_scalar_multiply(v_normal, 2));
+        Vector3 v_contact_point = Vector3_subtract(v_before_collision, Vector3_cross(w_after_collision, (Vector3){0, 0, R}));
+        Vector3 acceleration = Vector3_scalar_multiply(Vector3_normalize(v_contact_point), -mu_slide * g);
+        double x1, x2, x3, x4;
+        solve_quadratic(0.5 * acceleration.x, -v_contact_point.x, cushion_contact_point.x - initial_position.x, &x1, &x2);
+        solve_quadratic(0.5 * acceleration.y, -v_contact_point.y, cushion_contact_point.y - initial_position.y, &x3, &x4);
+        printf("%f %f %f %f\n", x1, x2, x3, x4);
+        cushion_coord += 10;
     }
 }
 
@@ -522,6 +558,25 @@ int main(int argc, char *argv[])
         SDL_RenderFillRect(renderer, &(SDL_Rect){initial_position.x - 5, initial_position.y - 5, 10, 10});
         SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
         SDL_RenderFillRect(renderer, &(SDL_Rect){target_position.x - 5, target_position.y - 5, 10, 10});
+        SDL_SetRenderDrawColor(renderer, 0, 0, 255, 255);
+        SDL_RenderFillRect(renderer, &(SDL_Rect){400, 400, 10, 10});
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        SDL_RenderDrawLine(renderer, initial_position.x, initial_position.y, initial_position.x + v_mag * v.x, initial_position.y + v_mag * v.y);
+        SDL_RenderDrawLine(renderer, initial_position.x, initial_position.y, initial_position.x + w_mag * w.x, initial_position.y + w_mag * w.y);
+        Vector3 cushion_normal = Vector3_normalize(Vector3_cross(Vector3_subtract(cushions[0].p2, cushions[0].p1), (Vector3){0, 0, 1}));
+        Vector3 velocity_before_collision = Vector3_subtract(Vector3_scalar_multiply(v, v_mag), Vector3_scalar_multiply(cushion_normal, 2 * v_mag * Vector3_dot(v, cushion_normal)));
+        Vector3 v_cp_before = Vector3_subtract(velocity_before_collision, Vector3_cross(Vector3_scalar_multiply(w, w_mag), (Vector3){0, 0, R}));
+        Vector3 acceleration = Vector3_scalar_multiply(Vector3_normalize(v_cp_before), -mu_slide * g);
+        SDL_RenderDrawLine(renderer, initial_position.x, initial_position.y, initial_position.x - velocity_before_collision.x, initial_position.y - velocity_before_collision.y);
+        for (int i = 0; i < 200; i++)
+        {
+            double t1 = 0.1 * i;
+            double t2 = 0.1 * (i + 1);
+            Vector3 p1 = Vector3_add(Vector3_add(initial_position, Vector3_scalar_multiply(velocity_before_collision, -t1)), Vector3_scalar_multiply(acceleration, 0.5 * t1 * t1));
+            Vector3 p2 = Vector3_add(Vector3_add(initial_position, Vector3_scalar_multiply(velocity_before_collision, -t2)), Vector3_scalar_multiply(acceleration, 0.5 * t2 * t2));
+            SDL_RenderDrawLine(renderer, p1.x, p1.y, p2.x, p2.y);
+        }
+
         SDL_RenderPresent(renderer);
     }
     SDL_DestroyRenderer(renderer);
