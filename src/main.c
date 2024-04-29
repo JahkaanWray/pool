@@ -223,11 +223,12 @@ bool detect_ball_cushion_collision(Ball ball, LineSegment line_segment, double *
     }
     double collision_time1 = segment->start_time + (-vn + sqrt(discriminant)) / an;
     double collision_time2 = segment->start_time + (-vn - sqrt(discriminant)) / an;
-    if (collision_time1 <= segment->start_time || collision_time1 > segment->end_time)
+    double tolerance = 1e-3;
+    if (collision_time1 <= segment->start_time + tolerance || collision_time1 > segment->end_time)
     {
         collision_time1 = -1;
     }
-    if (collision_time2 <= segment->start_time || collision_time2 > segment->end_time)
+    if (collision_time2 <= segment->start_time + tolerance || collision_time2 > segment->end_time)
     {
         collision_time2 = -1;
     }
@@ -253,6 +254,7 @@ bool detect_ball_cushion_collision(Ball ball, LineSegment line_segment, double *
 
 bool detect_ball_ball_collision(Ball ball1, Ball ball2, double *t)
 {
+
     return false;
 }
 
@@ -667,7 +669,7 @@ Scene new_scene()
     scene.table = new_table();
     scene.ball_set = standard_ball_set();
     Coefficients coefficients;
-    coefficients.mu_slide = 3.5;
+    coefficients.mu_slide = 14.5;
     coefficients.mu_roll = 0.83;
     coefficients.mu_ball_cushion = 0.5;
     coefficients.mu_ball_ball = 0.5;
