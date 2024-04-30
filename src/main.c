@@ -254,8 +254,68 @@ bool detect_ball_cushion_collision(Ball ball, LineSegment line_segment, double *
 
 bool detect_ball_ball_collision(Ball ball1, Ball ball2, double *t)
 {
+    PathSegment *segment1 = &(ball1.path.segments[ball1.path.num_segments - 1]);
+    PathSegment *segment2 = &(ball2.path.segments[ball2.path.num_segments - 1]);
+    Vector3 p1 = segment1->initial_position;
+    Vector3 p2 = segment2->initial_position;
+    Vector3 v1 = segment1->initial_velocity;
+    Vector3 v2 = segment2->initial_velocity;
+    Vector3 a1 = segment1->acceleration;
+    Vector3 a2 = segment2->acceleration;
+    double t1 = segment1->start_time;
+    double t2 = segment2->start_time;
+    double r1 = ball1.radius;
+    double r2 = ball2.radius;
 
-    return false;
+    double A1 = 0.5 * a1.x;
+    double B1 = v1.x - a1.x * t1;
+    double C1 = p1.x - v1.x * t1 + 0.5 * a1.x * t1 * t1;
+
+    double A2 = 0.5 * a2.x;
+    double B2 = v2.x - a2.x * t2;
+    double C2 = p2.x - v2.x * t2 + 0.5 * a2.x * t2 * t2;
+
+    double A3 = 0.5 * a1.y;
+    double B3 = v1.y - a1.y * t1;
+    double C3 = p1.y - v1.y * t1 + 0.5 * a1.y * t1 * t1;
+
+    double A4 = 0.5 * a2.y;
+    double B4 = v2.y - a2.y * t2;
+    double C4 = p2.y - v2.y * t2 + 0.5 * a2.y * t2 * t2;
+
+    double a = (A1 - A2) * (A1 - A2) + (A3 - A4) * (A3 - A4);
+    double b = 2 * ((A1 - A2) * (B1 - B2) + (A3 - A4) * (B3 - B4));
+    double c = 2 * ((A1 - A2) * (C1 - C2) + (A3 - A4) * (C3 - C4)) + (B1 - B2) * (B1 - B2) + (B3 - B4) * (B3 - B4);
+    double d = 2 * ((B1 - B2) * (C1 - C2) + (B3 - B4) * (C3 - C4));
+    double e = (C1 - C2) * (C1 - C2) + (C3 - C4) * (C3 - C4) - (r1 + r2) * (r1 + r2);
+
+    double x1, x2, x3, x4;
+    solve_quartic(a, b, c, d, e, &x1, &x2, &x3, &x4);
+
+    double collision_time = INFINITY;
+    double tolerance = 1e-3;
+    if (x1 > segment1->start_time + tolerance && x1 < segment1->end_time && x1 > segment2->start_time + tolerance && x1 < segment2->end_time && x1 < collision_time)
+    {
+        collision_time = x1;
+    }
+    if (x2 > segment1->start_time + tolerance && x2 < segment1->end_time && x2 > segment2->start_time + tolerance && x2 < segment2->end_time && x2 < collision_time)
+    {
+        collision_time = x2;
+    }
+    if (x3 > segment1->start_time + tolerance && x3 < segment1->end_time && x3 > segment2->start_time + tolerance && x3 < segment2->end_time && x3 < collision_time)
+    {
+        collision_time = x3;
+    }
+    if (x4 > segment1->start_time + tolerance && x4 < segment1->end_time && x4 > segment2->start_time + tolerance && x4 < segment2->end_time && x4 < collision_time)
+    {
+        collision_time = x4;
+    }
+    if (collision_time == INFINITY)
+    {
+        return false;
+    }
+    *t = collision_time;
+    return true;
 }
 
 typedef enum
@@ -403,23 +463,22 @@ bool update_path(Scene *scene)
     if (update_type == BALL_BALL)
     {
         resolve_ball_ball_collision(ball1, ball2, first_time, scene->coefficients);
-        printf("Ball ball collision\n");
+        printf("Ball %d hit ball %d\n", ball1->id, ball2->id);
     }
     else if (update_type == BALL_CUSHION)
     {
         resolve_ball_cushion_collision(ball1, cushion, first_time, scene->coefficients);
-        printf("Ball cushion collision\n");
+        printf("Ball %d hit cushion\n", ball1->id);
     }
     else if (update_type == BALL_ROLL)
     {
         resolve_roll(ball1, first_time, scene->coefficients);
-        printf("Ball roll\n");
+        printf("Ball %d started rolling\n", ball1->id);
     }
     else if (update_type == BALL_STOP)
     {
         resolve_stop(ball1, first_time);
-        printf("Ball stop\n");
-        return false;
+        printf("Ball %d stopped moving\n", ball1->id);
     }
     return true;
 }
@@ -433,7 +492,7 @@ void generate_paths(Scene *scene, Ball *ball, Vector3 initial_position, Vector3 
         {
             continue;
         }
-        PathSegment segment = {ball->initial_position, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, false, 0, INFINITY};
+        PathSegment segment = {current_ball->initial_position, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, false, 0, INFINITY};
         add_segment(&(current_ball->path), segment);
     }
     double mu_slide = scene->coefficients.mu_slide;
@@ -622,12 +681,37 @@ BallSet standard_ball_set()
         Ball ball;
         ball.id = i;
         ball.initial_position = (Vector3){500, 200 + 50 * i, 0};
-        ball.colour = 0x110000 * i + 0x000011 * (9 - i);
+        ball.colour = 0x010000 * (int)(255 * i / 10.0f) + 0x000101 * (int)(255 * (10 - i) / 10.0f);
         ball.radius = 10;
         ball.mass = 1;
         ball.path = new_path();
         ball_set.balls[i] = ball;
     }
+    return ball_set;
+}
+
+BallSet test_ball_set()
+{
+    BallSet ball_set;
+    ball_set.balls = malloc(2 * sizeof(Ball));
+    ball_set.num_balls = 2;
+    ball_set.ball_capacity = 2;
+    Ball ball1;
+    ball1.id = 0;
+    ball1.initial_position = (Vector3){500, 200, 0};
+    ball1.colour = 0xFF0000;
+    ball1.radius = 10;
+    ball1.mass = 1;
+    ball1.path = new_path();
+    ball_set.balls[0] = ball1;
+    Ball ball2;
+    ball2.id = 1;
+    ball2.initial_position = (Vector3){500, 650, 0};
+    ball2.colour = 0x0000FF;
+    ball2.radius = 10;
+    ball2.mass = 1;
+    ball2.path = new_path();
+    ball_set.balls[1] = ball2;
     return ball_set;
 }
 
@@ -642,40 +726,54 @@ void free_ball_set(BallSet *ball_set)
     ball_set->ball_capacity = 0;
 }
 
-void render_ball(SDL_Renderer *renderer, Ball ball)
+Vector3 get_ball_position(Ball ball, double time)
+{
+    for (int i = 0; i < ball.path.num_segments; i++)
+    {
+        PathSegment segment = ball.path.segments[i];
+        if (time >= segment.start_time && time < segment.end_time)
+        {
+            return get_position(segment, time);
+        }
+    }
+    return ball.initial_position;
+}
+
+void render_ball(SDL_Renderer *renderer, Ball ball, double time)
 {
     SDL_SetRenderDrawColor(renderer, (ball.colour >> 16) & 0xFF, (ball.colour >> 8) & 0xFF, ball.colour & 0xFF, 255);
-    SDL_RenderFillRect(renderer, &(SDL_Rect){ball.initial_position.x - ball.radius, ball.initial_position.y - ball.radius, 2 * ball.radius, 2 * ball.radius});
+    Vector3 position = get_ball_position(ball, time);
+    SDL_RenderFillRect(renderer, &(SDL_Rect){position.x - ball.radius, position.y - ball.radius, 2 * ball.radius, 2 * ball.radius});
     render_path(renderer, ball.path);
 }
 
-void render_ball_set(SDL_Renderer *renderer, BallSet ball_set)
+void render_ball_set(SDL_Renderer *renderer, BallSet ball_set, double time)
 {
     for (int i = 0; i < ball_set.num_balls; i++)
     {
-        render_ball(renderer, ball_set.balls[i]);
+        render_ball(renderer, ball_set.balls[i], time);
     }
 }
 
-void render_scene(SDL_Renderer *renderer, Scene scene)
+void render_scene(SDL_Renderer *renderer, Scene scene, double time)
 {
     render_table(renderer, scene.table);
-    render_ball_set(renderer, scene.ball_set);
+    render_ball_set(renderer, scene.ball_set, time);
 }
 
 Scene new_scene()
 {
     Scene scene;
     scene.table = new_table();
-    scene.ball_set = standard_ball_set();
+    scene.ball_set = test_ball_set();
     Coefficients coefficients;
-    coefficients.mu_slide = 14.5;
-    coefficients.mu_roll = 0.83;
+    coefficients.mu_slide = 5.5;
+    coefficients.mu_roll = 0.6;
     coefficients.mu_ball_cushion = 0.5;
     coefficients.mu_ball_ball = 0.5;
     coefficients.g = 9.8;
-    coefficients.e_ball_ball = 0.9;
-    coefficients.e_ball_cushion = 1.0;
+    coefficients.e_ball_ball = 1;
+    coefficients.e_ball_cushion = 1;
     coefficients.e_ball_table = 0.9;
 
     scene.coefficients = coefficients;
@@ -731,6 +829,9 @@ int main(int argc, char *argv[])
     Vector3 target_position = {700, 500, 0};
     Vector3 v_roll = {0, 50, 0};
 
+    double time = 0;
+    double playback_speed = 0;
+
     int mode = 0;
 
     bool quit = 0;
@@ -749,12 +850,26 @@ int main(int argc, char *argv[])
                 {
                     mode = (mode + 1) % 3;
                 }
+                else if (event.key.keysym.sym == SDLK_UP)
+                {
+                    playback_speed += 2;
+                }
+                else if (event.key.keysym.sym == SDLK_DOWN)
+                {
+                    playback_speed -= 2;
+                }
+                else if (event.key.keysym.sym == SDLK_RETURN)
+                {
+                    take_shot(&scene, v, w);
+                    time = 0;
+                    playback_speed = 0;
+                }
             }
             else if (event.type == SDL_MOUSEMOTION)
             {
                 int mx, my;
                 Uint32 mouseState = SDL_GetMouseState(&mx, &my);
-                /*if (mx > 1450 && mx < 1530 && my > 10 && my < 890)
+                if (mx > 1450 && mx < 1530 && my > 10 && my < 890)
                 {
                     v = Vector3_scalar_multiply(Vector3_normalize(v), 890 - my);
                 }
@@ -764,12 +879,16 @@ int main(int argc, char *argv[])
                 }
                 if (mx > 0 && mx < 100 && my > 700 && my < 800)
                 {
+                    double v_mag = Vector3_mag(v);
                     v = Vector3_normalize((Vector3){mx - 50, my - 750, 0});
+                    v = Vector3_scalar_multiply(v, v_mag);
                 }
                 if (mx > 0 && mx < 100 && my > 800 && my < 900)
                 {
+                    double w_mag = Vector3_mag(w);
                     w = Vector3_normalize((Vector3){mx - 50, my - 850, 0});
-                }*/
+                    w = Vector3_scalar_multiply(w, w_mag);
+                }
                 if (mode == 0)
                 {
                     target_position = (Vector3){mx, my, 0};
@@ -783,17 +902,20 @@ int main(int argc, char *argv[])
                 }
                 Vector3 required_velocity;
                 Vector3 required_angular_velocity;
-                solve_direct_shot(&scene, scene.ball_set.balls[0].initial_position, target_position, v_roll, &required_velocity, &required_angular_velocity);
-                v = (required_velocity);
-                w = (required_angular_velocity);
+                // solve_direct_shot(&scene, scene.ball_set.balls[0].initial_position, target_position, v_roll, &required_velocity, &required_angular_velocity);
+                // v = (required_velocity);
+                // w = (required_angular_velocity);
                 clear_paths(&scene);
                 take_shot(&scene, v, w);
+                time = 0;
             }
         }
 
+        time += playback_speed / 60;
+
         SDL_SetRenderDrawColor(renderer, 0, 180, 0, 255);
         SDL_RenderClear(renderer);
-        render_scene(renderer, scene);
+        render_scene(renderer, scene, time);
 
         SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
         SDL_RenderFillRect(renderer, &(SDL_Rect){target_position.x - 5, target_position.y - 5, 10, 10});
