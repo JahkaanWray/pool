@@ -11,7 +11,13 @@ typedef struct
 {
     Vector3 p1;
     Vector3 p2;
-} LineSegment;
+} Cushion;
+
+typedef struct
+{
+    Vector3 position;
+    double radius;
+} Pocket;
 
 typedef struct
 {
@@ -27,9 +33,12 @@ typedef struct
 
 typedef struct
 {
-    LineSegment *cushions;
+    Cushion *cushions;
     int num_cushions;
     int cushion_capacity;
+    Pocket *pockets;
+    int num_pockets;
+    int pocket_capacity;
 } Table;
 
 typedef struct
@@ -73,6 +82,51 @@ typedef struct
     BallSet ball_set;
     Coefficients coefficients;
 } Scene;
+
+typedef enum
+{
+    HUMAN,
+    AI
+} PlayerType;
+
+typedef struct
+{
+    PlayerType type;
+    Game *game;
+} Player;
+
+typedef enum
+{
+    NONE,
+    BALL_BALL_COLLISION,
+    BALL_CUSHION_COLLISION,
+    BALL_POCKETED,
+    BALL_ROLL,
+    BALL_STOP
+} ShotEventType;
+typedef struct
+{
+    ShotEventType type;
+    Ball *ball1;
+    Ball *ball2;
+    Cushion *cushion;
+    Pocket *pocket;
+} ShotEvent;
+
+typedef struct
+{
+    Path *ball_paths;
+    ShotEvent *events;
+} Shot;
+
+typedef struct
+{
+    Scene scene;
+    Player *players;
+    int num_players;
+
+    Shot *shot_history;
+} Game;
 
 Vector3 get_position(PathSegment segment, double time)
 {
@@ -194,7 +248,7 @@ void free_path(Path *path)
     path->capacity = 0;
 }
 
-bool detect_ball_cushion_collision(Ball ball, LineSegment line_segment, double *t)
+bool detect_ball_cushion_collision(Ball ball, Cushion line_segment, double *t)
 {
     double collision_time;
     PathSegment *segment = &(ball.path.segments[ball.path.num_segments - 1]);
@@ -358,7 +412,7 @@ void resolve_ball_ball_collision(Ball *ball1, Ball *ball2, double time, Coeffici
     add_sliding_segment(ball2, p2, v2_final, w2, time, coefficients);
 }
 
-void resolve_ball_cushion_collision(Ball *ball, LineSegment cushion, double time, Coefficients coefficients)
+void resolve_ball_cushion_collision(Ball *ball, Cushion cushion, double time, Coefficients coefficients)
 {
     PathSegment *segment = &(ball->path.segments[ball->path.num_segments - 1]);
     Vector3 p = get_position(*segment, time);
@@ -397,7 +451,7 @@ bool update_path(Scene *scene)
     UpdateType update_type = NONE;
     double first_time = INFINITY;
     double time = INFINITY;
-    LineSegment cushion;
+    Cushion cushion;
     Ball *ball1;
     Ball *ball2;
     for (int i = 0; i < scene->ball_set.num_balls; i++)
@@ -420,7 +474,7 @@ bool update_path(Scene *scene)
 
         for (int j = 0; j < scene->table.num_cushions; j++)
         {
-            LineSegment current_cushion = scene->table.cushions[j];
+            Cushion current_cushion = scene->table.cushions[j];
             if (detect_ball_cushion_collision(*current_ball, current_cushion, &time))
             {
                 if (time < first_time)
@@ -609,7 +663,7 @@ void solve_direct_shot(Scene *scene, Vector3 initial_position, Vector3 target_po
     *w = required_angular_velocity;
 }
 
-void solve_one_cushion_shot(Scene *scene, Vector3 initial_position, Vector3 target_position, Vector3 v_roll, LineSegment cushion, Vector3 *v, Vector3 *w)
+void solve_one_cushion_shot(Scene *scene, Vector3 initial_position, Vector3 target_position, Vector3 v_roll, Cushion cushion, Vector3 *v, Vector3 *w)
 {
     double mu_slide = scene->coefficients.mu_slide;
     double mu_roll = scene->coefficients.mu_roll;
@@ -641,13 +695,13 @@ void solve_one_cushion_shot(Scene *scene, Vector3 initial_position, Vector3 targ
 Table new_table()
 {
     Table table;
-    table.cushions = malloc(4 * sizeof(LineSegment));
+    table.cushions = malloc(4 * sizeof(Cushion));
     table.num_cushions = 4;
     table.cushion_capacity = 4;
-    table.cushions[0] = (LineSegment){{100, 100, 0}, {800, 100, 0}};
-    table.cushions[1] = (LineSegment){{800, 100, 0}, {800, 800, 0}};
-    table.cushions[2] = (LineSegment){{800, 800, 0}, {100, 800, 0}};
-    table.cushions[3] = (LineSegment){{100, 800, 0}, {100, 100, 0}};
+    table.cushions[0] = (Cushion){{100, 100, 0}, {800, 100, 0}};
+    table.cushions[1] = (Cushion){{800, 100, 0}, {800, 800, 0}};
+    table.cushions[2] = (Cushion){{800, 800, 0}, {100, 800, 0}};
+    table.cushions[3] = (Cushion){{100, 800, 0}, {100, 100, 0}};
     return table;
 }
 
@@ -656,7 +710,7 @@ void render_table(SDL_Renderer *renderer, Table table)
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     for (int i = 0; i < table.num_cushions; i++)
     {
-        LineSegment cushion = table.cushions[i];
+        Cushion cushion = table.cushions[i];
         SDL_RenderDrawLine(renderer, cushion.p1.x, cushion.p1.y, cushion.p2.x, cushion.p2.y);
     }
 }
@@ -700,7 +754,7 @@ BallSet test_ball_set()
     ball1.id = 0;
     ball1.initial_position = (Vector3){500, 200, 0};
     ball1.colour = 0xFF0000;
-    ball1.radius = 10;
+    ball1.radius = 5;
     ball1.mass = 1;
     ball1.path = new_path();
     ball_set.balls[0] = ball1;
@@ -708,7 +762,7 @@ BallSet test_ball_set()
     ball2.id = 1;
     ball2.initial_position = (Vector3){500, 650, 0};
     ball2.colour = 0x0000FF;
-    ball2.radius = 10;
+    ball2.radius = 5;
     ball2.mass = 1;
     ball2.path = new_path();
     ball_set.balls[1] = ball2;
@@ -846,17 +900,21 @@ int main(int argc, char *argv[])
             }
             else if (event.type == SDL_KEYDOWN)
             {
-                if (event.key.keysym.sym == SDLK_SPACE)
+                if (event.key.keysym.sym == SDLK_ESCAPE)
+                {
+                    quit = 1;
+                }
+                else if (event.key.keysym.sym == SDLK_SPACE)
                 {
                     mode = (mode + 1) % 3;
                 }
                 else if (event.key.keysym.sym == SDLK_UP)
                 {
-                    playback_speed += 2;
+                    playback_speed += 0.2;
                 }
                 else if (event.key.keysym.sym == SDLK_DOWN)
                 {
-                    playback_speed -= 2;
+                    playback_speed -= 0.2;
                 }
                 else if (event.key.keysym.sym == SDLK_RETURN)
                 {
@@ -905,9 +963,9 @@ int main(int argc, char *argv[])
                 // solve_direct_shot(&scene, scene.ball_set.balls[0].initial_position, target_position, v_roll, &required_velocity, &required_angular_velocity);
                 // v = (required_velocity);
                 // w = (required_angular_velocity);
+                v = Vector3_subtract((Vector3){mx, my, 0}, scene.ball_set.balls[0].initial_position);
                 clear_paths(&scene);
                 take_shot(&scene, v, w);
-                time = 0;
             }
         }
 
