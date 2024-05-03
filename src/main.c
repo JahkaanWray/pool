@@ -89,10 +89,12 @@ typedef enum
     AI
 } PlayerType;
 
+struct Game;
+
 typedef struct
 {
     PlayerType type;
-    Game *game;
+    struct Game *game;
 } Player;
 
 typedef enum
@@ -119,13 +121,29 @@ typedef struct
     ShotEvent *events;
 } Shot;
 
-typedef struct
+typedef enum
+{
+    BEFORE_SHOT,
+    DURING_SHOT,
+    AFTER_SHOT
+} GameState;
+
+typedef struct Game
 {
     Scene scene;
     Player *players;
     int num_players;
+    int current_player;
 
     Shot *shot_history;
+
+    GameState state;
+
+    double time;
+    double playback_speed;
+
+    Vector3 v;
+    Vector3 w;
 } Game;
 
 Vector3 get_position(PathSegment segment, double time)
@@ -372,16 +390,6 @@ bool detect_ball_ball_collision(Ball ball1, Ball ball2, double *t)
     return true;
 }
 
-typedef enum
-{
-    NONE,
-    BALL_BALL,
-    BALL_CUSHION,
-    BALL_TABLE,
-    BALL_ROLL,
-    BALL_STOP
-} UpdateType;
-
 void resolve_ball_ball_collision(Ball *ball1, Ball *ball2, double time, Coefficients coefficients)
 {
     PathSegment *segment1 = &(ball1->path.segments[ball1->path.num_segments - 1]);
@@ -448,7 +456,7 @@ void resolve_stop(Ball *ball, double time)
 
 bool update_path(Scene *scene)
 {
-    UpdateType update_type = NONE;
+    ShotEventType update_type = NONE;
     double first_time = INFINITY;
     double time = INFINITY;
     Cushion cushion;
@@ -465,7 +473,7 @@ bool update_path(Scene *scene)
                 if (time < first_time)
                 {
                     first_time = time;
-                    update_type = BALL_BALL;
+                    update_type = BALL_BALL_COLLISION;
                     ball1 = current_ball;
                     ball2 = other_ball;
                 }
@@ -480,7 +488,7 @@ bool update_path(Scene *scene)
                 if (time < first_time)
                 {
                     first_time = time;
-                    update_type = BALL_CUSHION;
+                    update_type = BALL_CUSHION_COLLISION;
                     ball1 = current_ball;
                     cushion = current_cushion;
                 }
@@ -514,12 +522,12 @@ bool update_path(Scene *scene)
     {
         return false;
     }
-    if (update_type == BALL_BALL)
+    if (update_type == BALL_BALL_COLLISION)
     {
         resolve_ball_ball_collision(ball1, ball2, first_time, scene->coefficients);
         printf("Ball %d hit ball %d\n", ball1->id, ball2->id);
     }
-    else if (update_type == BALL_CUSHION)
+    else if (update_type == BALL_CUSHION_COLLISION)
     {
         resolve_ball_cushion_collision(ball1, cushion, first_time, scene->coefficients);
         printf("Ball %d hit cushion\n", ball1->id);
@@ -869,119 +877,122 @@ void clear_paths(Scene *scene)
     }
 }
 
+Game *new_game()
+{
+    Game *game = malloc(sizeof(Game));
+    game->scene = new_scene();
+    game->num_players = 2;
+    game->players = malloc(game->num_players * sizeof(Player));
+    for (int i = 0; i < game->num_players; i++)
+    {
+        game->players[i].game = game;
+        game->players[i].type = AI;
+    }
+    game->current_player = 0;
+    game->v = (Vector3){1, 0, 0};
+    game->w = (Vector3){0, 1, 0};
+    game->time = 0;
+    game->playback_speed = 0;
+    game->state = BEFORE_SHOT;
+    return game;
+}
+
+void free_game(Game *game)
+{
+    free_ball_set(&(game->scene.ball_set));
+    free(game->players);
+    free(game);
+}
+
+void render_game(SDL_Renderer *renderer, Game *game)
+{
+    SDL_SetRenderDrawColor(renderer, 0, 180, 0, 255);
+    SDL_RenderClear(renderer);
+    render_scene(renderer, game->scene, game->time);
+    render_UI(renderer, game->v, game->w);
+}
+
+bool handle_events(SDL_Event *event, Game *game)
+{
+    while (SDL_PollEvent(event))
+    {
+        if (event->type == SDL_QUIT)
+        {
+            return true;
+        }
+        else if (event->type == SDL_KEYDOWN)
+        {
+            if (event->key.keysym.sym == SDLK_ESCAPE)
+            {
+                return true;
+            }
+            else if (event->key.keysym.sym == SDLK_UP)
+            {
+                game->playback_speed += 0.2;
+            }
+            else if (event->key.keysym.sym == SDLK_DOWN)
+            {
+                game->playback_speed -= 0.2;
+            }
+            else if (event->key.keysym.sym == SDLK_RETURN)
+            {
+                take_shot(&(game->scene), game->v, game->w);
+                game->time = 0;
+                game->playback_speed = 0;
+            }
+        }
+        else if (event->type == SDL_MOUSEMOTION)
+        {
+            int mx, my;
+            Uint32 mouseState = SDL_GetMouseState(&mx, &my);
+            if (mx > 1450 && mx < 1530 && my > 10 && my < 890)
+            {
+                game->v = Vector3_scalar_multiply(Vector3_normalize(game->v), 890 - my);
+            }
+            if (mx > 1550 && mx < 1630 && my > 10 && my < 890)
+            {
+                game->w = Vector3_scalar_multiply(Vector3_normalize(game->w), 890 - my);
+            }
+            if (mx > 0 && mx < 100 && my > 700 && my < 800)
+            {
+                double v_mag = Vector3_mag(game->v);
+                game->v = Vector3_normalize((Vector3){mx - 50, my - 750, 0});
+                game->v = Vector3_scalar_multiply(game->v, v_mag);
+            }
+            if (mx > 0 && mx < 100 && my > 800 && my < 900)
+            {
+                double w_mag = Vector3_mag(game->w);
+                game->w = Vector3_normalize((Vector3){mx - 50, my - 850, 0});
+                game->w = Vector3_scalar_multiply(game->w, w_mag);
+            }
+            // solve_direct_shot(&scene, scene.ball_set.balls[0].initial_position, target_position, v_roll, &required_velocity, &required_angular_velocity);
+            game->v = Vector3_subtract((Vector3){mx, my, 0}, game->scene.ball_set.balls[0].initial_position);
+            clear_paths(&(game->scene));
+            take_shot(&(game->scene), game->v, game->w);
+        }
+    }
+}
+
 int main(int argc, char *argv[])
 {
     SDL_Init(SDL_INIT_VIDEO);
     SDL_Window *window = SDL_CreateWindow("SDL2 Window", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 1640, 900, 0);
     SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
 
-    Scene scene = new_scene();
+    Game *game = new_game();
 
-    Vector3 v = {1, 0, 0};
-    Vector3 w = {0, 1, 0};
-
-    Vector3 target_position = {700, 500, 0};
-    Vector3 v_roll = {0, 50, 0};
-
-    double time = 0;
-    double playback_speed = 0;
-
-    int mode = 0;
-
-    bool quit = 0;
+    bool quit = false;
     SDL_Event event;
     while (!quit)
     {
-        while (SDL_PollEvent(&event))
-        {
-            if (event.type == SDL_QUIT)
-            {
-                quit = 1;
-            }
-            else if (event.type == SDL_KEYDOWN)
-            {
-                if (event.key.keysym.sym == SDLK_ESCAPE)
-                {
-                    quit = 1;
-                }
-                else if (event.key.keysym.sym == SDLK_SPACE)
-                {
-                    mode = (mode + 1) % 3;
-                }
-                else if (event.key.keysym.sym == SDLK_UP)
-                {
-                    playback_speed += 0.2;
-                }
-                else if (event.key.keysym.sym == SDLK_DOWN)
-                {
-                    playback_speed -= 0.2;
-                }
-                else if (event.key.keysym.sym == SDLK_RETURN)
-                {
-                    take_shot(&scene, v, w);
-                    time = 0;
-                    playback_speed = 0;
-                }
-            }
-            else if (event.type == SDL_MOUSEMOTION)
-            {
-                int mx, my;
-                Uint32 mouseState = SDL_GetMouseState(&mx, &my);
-                if (mx > 1450 && mx < 1530 && my > 10 && my < 890)
-                {
-                    v = Vector3_scalar_multiply(Vector3_normalize(v), 890 - my);
-                }
-                if (mx > 1550 && mx < 1630 && my > 10 && my < 890)
-                {
-                    w = Vector3_scalar_multiply(Vector3_normalize(w), 890 - my);
-                }
-                if (mx > 0 && mx < 100 && my > 700 && my < 800)
-                {
-                    double v_mag = Vector3_mag(v);
-                    v = Vector3_normalize((Vector3){mx - 50, my - 750, 0});
-                    v = Vector3_scalar_multiply(v, v_mag);
-                }
-                if (mx > 0 && mx < 100 && my > 800 && my < 900)
-                {
-                    double w_mag = Vector3_mag(w);
-                    w = Vector3_normalize((Vector3){mx - 50, my - 850, 0});
-                    w = Vector3_scalar_multiply(w, w_mag);
-                }
-                if (mode == 0)
-                {
-                    target_position = (Vector3){mx, my, 0};
-                }
-                else if (mode == 1)
-                {
-                }
-                else
-                {
-                    v_roll = Vector3_subtract(target_position, (Vector3){mx, my, 0});
-                }
-                Vector3 required_velocity;
-                Vector3 required_angular_velocity;
-                // solve_direct_shot(&scene, scene.ball_set.balls[0].initial_position, target_position, v_roll, &required_velocity, &required_angular_velocity);
-                // v = (required_velocity);
-                // w = (required_angular_velocity);
-                v = Vector3_subtract((Vector3){mx, my, 0}, scene.ball_set.balls[0].initial_position);
-                clear_paths(&scene);
-                take_shot(&scene, v, w);
-            }
-        }
+        quit = handle_events(&event, game);
 
-        time += playback_speed / 60;
+        game->time += game->playback_speed / 60;
 
-        SDL_SetRenderDrawColor(renderer, 0, 180, 0, 255);
-        SDL_RenderClear(renderer);
-        render_scene(renderer, scene, time);
-
-        SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
-        SDL_RenderFillRect(renderer, &(SDL_Rect){target_position.x - 5, target_position.y - 5, 10, 10});
-
-        render_UI(renderer, v, w);
-
+        render_game(renderer, game);
         SDL_RenderPresent(renderer);
     }
+    free_game(game);
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
     SDL_Quit();
