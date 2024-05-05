@@ -113,12 +113,15 @@ typedef struct
     Ball *ball2;
     Cushion *cushion;
     Pocket *pocket;
+    double time;
 } ShotEvent;
 
 typedef struct
 {
     Path *ball_paths;
     ShotEvent *events;
+    int num_events;
+    int event_capacity;
 } Shot;
 
 typedef enum
@@ -135,7 +138,10 @@ typedef struct Game
     int num_players;
     int current_player;
 
+    Shot current_shot;
     Shot *shot_history;
+    int num_shots;
+    int shot_capacity;
 
     GameState state;
 
@@ -145,6 +151,24 @@ typedef struct Game
     Vector3 v;
     Vector3 w;
 } Game;
+
+void shot_add_event(Shot *shot, ShotEvent event)
+{
+    if (shot->num_events == shot->event_capacity)
+    {
+        if (shot->event_capacity == 0)
+        {
+            shot->event_capacity = 1;
+        }
+        else
+        {
+            shot->event_capacity *= 2;
+        }
+        shot->events = realloc(shot->events, shot->event_capacity * sizeof(ShotEvent));
+    }
+    shot->events[shot->num_events] = event;
+    shot->num_events++;
+}
 
 Vector3 get_position(PathSegment segment, double time)
 {
@@ -390,6 +414,66 @@ bool detect_ball_ball_collision(Ball ball1, Ball ball2, double *t)
     return true;
 }
 
+bool detect_ball_pocket_collision(Ball ball, Pocket pocket, double *t)
+{
+    PathSegment *segment1 = &(ball.path.segments[ball.path.num_segments - 1]);
+    Vector3 p1 = segment1->initial_position;
+    Vector3 p2 = pocket.position;
+    Vector3 v1 = segment1->initial_velocity;
+    Vector3 v2 = {0, 0, 0};
+    Vector3 a1 = segment1->acceleration;
+    Vector3 a2 = {0, 0, 0};
+    double t1 = segment1->start_time;
+    double r1 = ball.radius;
+    double r2 = pocket.radius;
+
+    double A1 = 0.5 * a1.x;
+    double B1 = v1.x - a1.x * t1;
+    double C1 = p1.x - v1.x * t1 + 0.5 * a1.x * t1 * t1;
+
+    double C2 = p2.x;
+
+    double A3 = 0.5 * a1.y;
+    double B3 = v1.y - a1.y * t1;
+    double C3 = p1.y - v1.y * t1 + 0.5 * a1.y * t1 * t1;
+
+    double C4 = p2.y;
+
+    double a = (A1) * (A1) + (A3) * (A3);
+    double b = 2 * ((A1) * (B1) + (A3) * (B3));
+    double c = 2 * ((A1) * (C1 - C2) + (A3) * (C3 - C4)) + (B1) * (B1) + (B3) * (B3);
+    double d = 2 * ((B1) * (C1 - C2) + (B3) * (C3 - C4));
+    double e = (C1 - C2) * (C1 - C2) + (C3 - C4) * (C3 - C4) - (r1 + r2) * (r1 + r2);
+
+    double x1, x2, x3, x4;
+    solve_quartic(a, b, c, d, e, &x1, &x2, &x3, &x4);
+
+    double collision_time = INFINITY;
+    double tolerance = 1e-3;
+    if (x1 > segment1->start_time + tolerance && x1 < segment1->end_time)
+    {
+        collision_time = x1;
+    }
+    if (x2 > segment1->start_time + tolerance && x2 < segment1->end_time)
+    {
+        collision_time = x2;
+    }
+    if (x3 > segment1->start_time + tolerance && x3 < segment1->end_time)
+    {
+        collision_time = x3;
+    }
+    if (x4 > segment1->start_time + tolerance && x4 < segment1->end_time)
+    {
+        collision_time = x4;
+    }
+    if (collision_time == INFINITY)
+    {
+        return false;
+    }
+    *t = collision_time;
+    return true;
+}
+
 void resolve_ball_ball_collision(Ball *ball1, Ball *ball2, double time, Coefficients coefficients)
 {
     PathSegment *segment1 = &(ball1->path.segments[ball1->path.num_segments - 1]);
@@ -437,6 +521,15 @@ void resolve_ball_cushion_collision(Ball *ball, Cushion cushion, double time, Co
     add_sliding_segment(ball, p, v_final, w, time, coefficients);
 }
 
+void resolve_ball_pocket_collision(Ball *ball, Pocket pocket, double time, Coefficients coefficients)
+{
+    PathSegment *segment = &(ball->path.segments[ball->path.num_segments - 1]);
+    Vector3 p = Vector3_add((Vector3){1000, 200, 0}, Vector3_scalar_multiply((Vector3){0, 50, 0}, ball->id));
+    Vector3 v = get_velocity(*segment, time);
+    Vector3 w = get_angular_velocity(*segment, time);
+    add_sliding_segment(ball, p, v, w, time, coefficients);
+}
+
 void resolve_roll(Ball *ball, double time, Coefficients coefficients)
 {
     PathSegment *segment = &(ball->path.segments[ball->path.num_segments - 1]);
@@ -454,7 +547,7 @@ void resolve_stop(Ball *ball, double time)
     add_segment(&(ball->path), stop_segment);
 }
 
-bool update_path(Scene *scene)
+bool update_path(Game *game)
 {
     ShotEventType update_type = NONE;
     double first_time = INFINITY;
@@ -462,12 +555,13 @@ bool update_path(Scene *scene)
     Cushion cushion;
     Ball *ball1;
     Ball *ball2;
-    for (int i = 0; i < scene->ball_set.num_balls; i++)
+    Pocket pocket;
+    for (int i = 0; i < game->scene.ball_set.num_balls; i++)
     {
-        Ball *current_ball = &(scene->ball_set.balls[i]);
-        for (int j = i + 1; j < scene->ball_set.num_balls; j++)
+        Ball *current_ball = &(game->scene.ball_set.balls[i]);
+        for (int j = i + 1; j < game->scene.ball_set.num_balls; j++)
         {
-            Ball *other_ball = &(scene->ball_set.balls[j]);
+            Ball *other_ball = &(game->scene.ball_set.balls[j]);
             if (detect_ball_ball_collision(*current_ball, *other_ball, &time))
             {
                 if (time < first_time)
@@ -480,9 +574,9 @@ bool update_path(Scene *scene)
             }
         }
 
-        for (int j = 0; j < scene->table.num_cushions; j++)
+        for (int j = 0; j < game->scene.table.num_cushions; j++)
         {
-            Cushion current_cushion = scene->table.cushions[j];
+            Cushion current_cushion = game->scene.table.cushions[j];
             if (detect_ball_cushion_collision(*current_ball, current_cushion, &time))
             {
                 if (time < first_time)
@@ -494,14 +588,29 @@ bool update_path(Scene *scene)
                 }
             }
         }
-    }
-    double mu_slide = scene->coefficients.mu_slide;
-    double mu_roll = scene->coefficients.mu_roll;
-    double g = scene->coefficients.g;
 
-    for (int i = 0; i < scene->ball_set.num_balls; i++)
+        for (int j = 0; j < game->scene.table.num_pockets; j++)
+        {
+            Pocket current_pocket = game->scene.table.pockets[j];
+            if (detect_ball_pocket_collision(*current_ball, current_pocket, &time))
+            {
+                if (time < first_time)
+                {
+                    first_time = time;
+                    update_type = BALL_POCKETED;
+                    ball1 = current_ball;
+                    pocket = current_pocket;
+                }
+            }
+        }
+    }
+    double mu_slide = game->scene.coefficients.mu_slide;
+    double mu_roll = game->scene.coefficients.mu_roll;
+    double g = game->scene.coefficients.g;
+
+    for (int i = 0; i < game->scene.ball_set.num_balls; i++)
     {
-        Ball *current_ball = &(scene->ball_set.balls[i]);
+        Ball *current_ball = &(game->scene.ball_set.balls[i]);
         PathSegment *last_segment = &(current_ball->path.segments[current_ball->path.num_segments - 1]);
         time = last_segment->end_time;
         if (time < first_time)
@@ -524,32 +633,34 @@ bool update_path(Scene *scene)
     }
     if (update_type == BALL_BALL_COLLISION)
     {
-        resolve_ball_ball_collision(ball1, ball2, first_time, scene->coefficients);
-        printf("Ball %d hit ball %d\n", ball1->id, ball2->id);
+        resolve_ball_ball_collision(ball1, ball2, first_time, game->scene.coefficients);
     }
     else if (update_type == BALL_CUSHION_COLLISION)
     {
-        resolve_ball_cushion_collision(ball1, cushion, first_time, scene->coefficients);
-        printf("Ball %d hit cushion\n", ball1->id);
+        resolve_ball_cushion_collision(ball1, cushion, first_time, game->scene.coefficients);
+    }
+    else if (update_type == BALL_POCKETED)
+    {
+        resolve_ball_pocket_collision(ball1, pocket, first_time, game->scene.coefficients);
     }
     else if (update_type == BALL_ROLL)
     {
-        resolve_roll(ball1, first_time, scene->coefficients);
-        printf("Ball %d started rolling\n", ball1->id);
+        resolve_roll(ball1, first_time, game->scene.coefficients);
     }
     else if (update_type == BALL_STOP)
     {
         resolve_stop(ball1, first_time);
-        printf("Ball %d stopped moving\n", ball1->id);
     }
+    ShotEvent event = {update_type, ball1, ball2, &cushion, NULL, first_time};
+    shot_add_event(&(game->current_shot), event);
     return true;
 }
 
-void generate_paths(Scene *scene, Ball *ball, Vector3 initial_position, Vector3 initial_velocity, Vector3 initial_angular_velocity, double start_time)
+void generate_paths(Game *game, Ball *ball, Vector3 initial_position, Vector3 initial_velocity, Vector3 initial_angular_velocity, double start_time)
 {
-    for (int i = 0; i < scene->ball_set.num_balls; i++)
+    for (int i = 0; i < game->scene.ball_set.num_balls; i++)
     {
-        Ball *current_ball = &(scene->ball_set.balls[i]);
+        Ball *current_ball = &(game->scene.ball_set.balls[i]);
         if (current_ball->id == ball->id)
         {
             continue;
@@ -557,9 +668,9 @@ void generate_paths(Scene *scene, Ball *ball, Vector3 initial_position, Vector3 
         PathSegment segment = {current_ball->initial_position, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, false, 0, INFINITY};
         add_segment(&(current_ball->path), segment);
     }
-    double mu_slide = scene->coefficients.mu_slide;
-    double mu_roll = scene->coefficients.mu_roll;
-    double g = scene->coefficients.g;
+    double mu_slide = game->scene.coefficients.mu_slide;
+    double mu_roll = game->scene.coefficients.mu_roll;
+    double g = game->scene.coefficients.g;
     double R = ball->radius;
     double end_time;
 
@@ -570,7 +681,7 @@ void generate_paths(Scene *scene, Ball *ball, Vector3 initial_position, Vector3 
     end_time = start_time + 2 * Vector3_mag(contact_point_v) / (7 * mu_slide * g);
     PathSegment segment = {initial_position, initial_velocity, acceleration, initial_angular_velocity, angular_acceleration, false, start_time, end_time};
     add_segment(&(ball->path), segment);
-    while (update_path(scene))
+    while (update_path(game))
         ;
 }
 
@@ -710,6 +821,10 @@ Table new_table()
     table.cushions[1] = (Cushion){{800, 100, 0}, {800, 800, 0}};
     table.cushions[2] = (Cushion){{800, 800, 0}, {100, 800, 0}};
     table.cushions[3] = (Cushion){{100, 800, 0}, {100, 100, 0}};
+    table.pockets = malloc(sizeof(Pocket));
+    table.num_pockets = 1;
+    table.pocket_capacity = 1;
+    table.pockets[0] = (Pocket){100, 100, 0, 50};
     return table;
 }
 
@@ -720,6 +835,11 @@ void render_table(SDL_Renderer *renderer, Table table)
     {
         Cushion cushion = table.cushions[i];
         SDL_RenderDrawLine(renderer, cushion.p1.x, cushion.p1.y, cushion.p2.x, cushion.p2.y);
+    }
+    for (int i = 0; i < table.num_pockets; i++)
+    {
+        Pocket pocket = table.pockets[i];
+        SDL_RenderFillRect(renderer, &(SDL_Rect){pocket.position.x - pocket.radius, pocket.position.y - pocket.radius, 2 * pocket.radius, 2 * pocket.radius});
     }
 }
 
@@ -743,12 +863,22 @@ BallSet standard_ball_set()
         Ball ball;
         ball.id = i;
         ball.initial_position = (Vector3){500, 200 + 50 * i, 0};
-        ball.colour = 0x010000 * (int)(255 * i / 10.0f) + 0x000101 * (int)(255 * (10 - i) / 10.0f);
         ball.radius = 10;
         ball.mass = 1;
         ball.path = new_path();
         ball_set.balls[i] = ball;
     }
+    ball_set.balls[0].colour = 0xFFFFFF;
+    ball_set.balls[1].colour = 0xFFFF00;
+    ball_set.balls[2].colour = 0x0000FF;
+    ball_set.balls[3].colour = 0xFF0000;
+    ball_set.balls[4].colour = 0xFF00FF;
+    ball_set.balls[5].colour = 0xFFF000;
+    ball_set.balls[6].colour = 0x00FF00;
+    ball_set.balls[7].colour = 0x00FFFF;
+    ball_set.balls[8].colour = 0x000000;
+    ball_set.balls[9].colour = 0xAAAA00;
+
     return ball_set;
 }
 
@@ -827,15 +957,15 @@ Scene new_scene()
 {
     Scene scene;
     scene.table = new_table();
-    scene.ball_set = test_ball_set();
+    scene.ball_set = standard_ball_set();
     Coefficients coefficients;
     coefficients.mu_slide = 5.5;
     coefficients.mu_roll = 0.6;
     coefficients.mu_ball_cushion = 0.5;
     coefficients.mu_ball_ball = 0.5;
     coefficients.g = 9.8;
-    coefficients.e_ball_ball = 1;
-    coefficients.e_ball_cushion = 1;
+    coefficients.e_ball_ball = 0.8;
+    coefficients.e_ball_cushion = 0.9;
     coefficients.e_ball_table = 0.9;
 
     scene.coefficients = coefficients;
@@ -861,12 +991,31 @@ void render_UI(SDL_Renderer *renderer, Vector3 v, Vector3 w)
     SDL_RenderDrawLine(renderer, 50, 850, 50 + 50 * w_normalized.x, 850 + 50 * w_normalized.y);
 }
 
-void take_shot(Scene *scene, Vector3 velocity, Vector3 angular_velocity)
+void generate_shot(Game *game, Vector3 velocity, Vector3 angular_velocity)
 {
-    Ball *cue_ball = &(scene->ball_set.balls[0]);
-    generate_paths(scene, cue_ball, cue_ball->initial_position, velocity, angular_velocity, 0);
-    printf("Path generated\n");
-    printf("Path has %d segments\n", cue_ball->path.num_segments);
+    Ball *cue_ball = &(game->scene.ball_set.balls[0]);
+    game->current_shot.num_events = 0;
+    generate_paths(game, cue_ball, cue_ball->initial_position, velocity, angular_velocity, 0);
+    for (int i = 0; i < game->scene.ball_set.num_balls; i++)
+    {
+        game->current_shot.ball_paths[i] = game->scene.ball_set.balls[i].path;
+    }
+}
+
+void take_shot(Game *game)
+{
+    if (game->num_shots == game->shot_capacity)
+    {
+        game->shot_capacity *= 2;
+        game->shot_history = realloc(game->shot_history, game->shot_capacity * sizeof(Shot));
+    }
+    game->shot_history[game->num_shots] = game->current_shot;
+    game->num_shots++;
+    Shot shot;
+    shot.ball_paths = malloc(game->scene.ball_set.num_balls * sizeof(Path));
+    shot.events = malloc(10 * sizeof(ShotEvent));
+    shot.event_capacity = 10;
+    game->current_shot = shot;
 }
 
 void clear_paths(Scene *scene)
@@ -886,14 +1035,23 @@ Game *new_game()
     for (int i = 0; i < game->num_players; i++)
     {
         game->players[i].game = game;
-        game->players[i].type = AI;
     }
+    game->players[0].type = HUMAN;
+    game->players[1].type = AI;
     game->current_player = 0;
     game->v = (Vector3){1, 0, 0};
     game->w = (Vector3){0, 1, 0};
     game->time = 0;
     game->playback_speed = 0;
     game->state = BEFORE_SHOT;
+    game->num_shots = 0;
+    game->shot_capacity = 10;
+    game->shot_history = malloc(game->shot_capacity * sizeof(Shot));
+    Shot shot;
+    shot.ball_paths = malloc(game->scene.ball_set.num_balls * sizeof(Path));
+    shot.events = malloc(10 * sizeof(ShotEvent));
+    shot.event_capacity = 10;
+    game->current_shot = shot;
     return game;
 }
 
@@ -918,6 +1076,7 @@ bool handle_events(SDL_Event *event, Game *game)
     {
         if (event->type == SDL_QUIT)
         {
+            printf("Quit\n");
             return true;
         }
         else if (event->type == SDL_KEYDOWN)
@@ -928,49 +1087,98 @@ bool handle_events(SDL_Event *event, Game *game)
             }
             else if (event->key.keysym.sym == SDLK_UP)
             {
-                game->playback_speed += 0.2;
+                if (game->state == DURING_SHOT)
+                {
+                    game->playback_speed += 0.2;
+                }
             }
             else if (event->key.keysym.sym == SDLK_DOWN)
             {
-                game->playback_speed -= 0.2;
+                if (game->state == DURING_SHOT)
+                {
+                    game->playback_speed -= 0.2;
+                }
             }
             else if (event->key.keysym.sym == SDLK_RETURN)
             {
-                take_shot(&(game->scene), game->v, game->w);
-                game->time = 0;
-                game->playback_speed = 0;
+                if (game->state == BEFORE_SHOT)
+                {
+                    if (game->players[game->current_player].type == HUMAN)
+                    {
+                        take_shot(game);
+                        game->state = DURING_SHOT;
+                        game->time = 0;
+                        game->playback_speed = 1;
+
+                        printf("Number of shots taken : %d\n", game->num_shots);
+                    }
+                }
+                else if (game->state == DURING_SHOT)
+                {
+                    game->state = AFTER_SHOT;
+                }
+                else if (game->state == AFTER_SHOT)
+                {
+                    game->state = BEFORE_SHOT;
+                    for (int i = 0; i < game->scene.ball_set.num_balls; i++)
+                    {
+                        Ball *ball = &(game->scene.ball_set.balls[i]);
+                        ball->initial_position = get_ball_position(*ball, game->time);
+                        ball->path.num_segments = 0;
+                    }
+                    clear_paths(&(game->scene));
+                    game->time = 0;
+                    game->playback_speed = 0;
+                }
             }
         }
         else if (event->type == SDL_MOUSEMOTION)
         {
-            int mx, my;
-            Uint32 mouseState = SDL_GetMouseState(&mx, &my);
-            if (mx > 1450 && mx < 1530 && my > 10 && my < 890)
+            if (game->state == BEFORE_SHOT)
             {
-                game->v = Vector3_scalar_multiply(Vector3_normalize(game->v), 890 - my);
+                if (game->players[game->current_player].type == HUMAN)
+                {
+                    int mx, my;
+                    mx = 400;
+                    my = 400;
+                    Uint32 mouseState = SDL_GetMouseState(&mx, &my);
+                    if (mx > 1450 && mx < 1530 && my > 10 && my < 890)
+                    {
+                        game->v = Vector3_scalar_multiply(Vector3_normalize(game->v), 890 - my);
+                    }
+                    if (mx > 1550 && mx < 1630 && my > 10 && my < 890)
+                    {
+                        game->w = Vector3_scalar_multiply(Vector3_normalize(game->w), 890 - my);
+                    }
+                    if (mx > 0 && mx < 100 && my > 700 && my < 800)
+                    {
+                        double v_mag = Vector3_mag(game->v);
+                        game->v = Vector3_normalize((Vector3){mx - 50, my - 750, 0});
+                        game->v = Vector3_scalar_multiply(game->v, v_mag);
+                    }
+                    if (mx > 0 && mx < 100 && my > 800 && my < 900)
+                    {
+                        double w_mag = Vector3_mag(game->w);
+                        game->w = Vector3_normalize((Vector3){mx - 50, my - 850, 0});
+                        game->w = Vector3_scalar_multiply(game->w, w_mag);
+                    }
+                    // solve_direct_shot(&scene, scene.ball_set.balls[0].initial_position, target_position, v_roll, &required_velocity, &required_angular_velocity);
+                    game->v = Vector3_subtract((Vector3){mx, my, 0}, game->scene.ball_set.balls[0].initial_position);
+                    clear_paths(&(game->scene));
+                    generate_shot(game, game->v, game->w);
+                    game->time = 0;
+                    game->playback_speed = 0;
+                }
             }
-            if (mx > 1550 && mx < 1630 && my > 10 && my < 890)
+            else if (game->state == DURING_SHOT)
             {
-                game->w = Vector3_scalar_multiply(Vector3_normalize(game->w), 890 - my);
             }
-            if (mx > 0 && mx < 100 && my > 700 && my < 800)
+            else if (game->state == AFTER_SHOT)
             {
-                double v_mag = Vector3_mag(game->v);
-                game->v = Vector3_normalize((Vector3){mx - 50, my - 750, 0});
-                game->v = Vector3_scalar_multiply(game->v, v_mag);
             }
-            if (mx > 0 && mx < 100 && my > 800 && my < 900)
-            {
-                double w_mag = Vector3_mag(game->w);
-                game->w = Vector3_normalize((Vector3){mx - 50, my - 850, 0});
-                game->w = Vector3_scalar_multiply(game->w, w_mag);
-            }
-            // solve_direct_shot(&scene, scene.ball_set.balls[0].initial_position, target_position, v_roll, &required_velocity, &required_angular_velocity);
-            game->v = Vector3_subtract((Vector3){mx, my, 0}, game->scene.ball_set.balls[0].initial_position);
-            clear_paths(&(game->scene));
-            take_shot(&(game->scene), game->v, game->w);
         }
     }
+    return false;
 }
 
 int main(int argc, char *argv[])
@@ -987,15 +1195,22 @@ int main(int argc, char *argv[])
     {
         quit = handle_events(&event, game);
 
-        game->time += game->playback_speed / 60;
+        if (game->state == DURING_SHOT)
+        {
+            game->time += game->playback_speed / 60;
+        }
 
         render_game(renderer, game);
         SDL_RenderPresent(renderer);
     }
     free_game(game);
+    printf("Game freed\n");
     SDL_DestroyRenderer(renderer);
+    printf("Renderer destroyed\n");
     SDL_DestroyWindow(window);
+    printf("Window destroyed\n");
     SDL_Quit();
+    printf("Quit\n");
 
     return 0;
 }
