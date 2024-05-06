@@ -1,6 +1,7 @@
 {
     "files.associations": {
         "sdl.h": "c",
-        "complex.h": "c"
+        "complex.h": "c",
+        "structs.c": "c"
     }
 }

@@ -6,6 +6,9 @@ vector: src/vector3.c
 main: src/main.c vector poly
 	gcc -o main src/main.c vector3.o  polynomial.o -lm -lSDL2 -g
 
+main2: src/main2.c vector poly
+	gcc -o main2 src/main2.c vector3.o  polynomial.o -lm -lSDL2 -g
+
 poly: src/polynomial.c
 	gcc -c src/polynomial.c -lm -g
 

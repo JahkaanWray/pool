@@ -56,6 +56,7 @@ typedef struct
     double radius;
     double mass;
     Path path;
+    bool pocketed;
 } Ball;
 
 typedef struct
@@ -524,7 +525,15 @@ void resolve_ball_cushion_collision(Ball *ball, Cushion cushion, double time, Co
 void resolve_ball_pocket_collision(Ball *ball, Pocket pocket, double time, Coefficients coefficients)
 {
     PathSegment *segment = &(ball->path.segments[ball->path.num_segments - 1]);
-    Vector3 p = Vector3_add((Vector3){1000, 200, 0}, Vector3_scalar_multiply((Vector3){0, 50, 0}, ball->id));
+    Vector3 p;
+    if (ball->id == 0)
+    {
+        p = (Vector3){500, 300, 0};
+    }
+    else
+    {
+        p = Vector3_add((Vector3){1000, 200, 0}, Vector3_scalar_multiply((Vector3){0, 50, 0}, ball->id));
+    }
     Vector3 v = {0, 0, 0};
     Vector3 w = {0, 0, 0};
     add_sliding_segment(ball, p, v, w, time, coefficients);
@@ -717,6 +726,88 @@ void render_path(SDL_Renderer *renderer, Path path)
     }
 }
 
+void pot_ball(Game *game, Ball *ball)
+{
+    Vector3 p2 = ball->initial_position;
+    Vector3 p3 = game->scene.ball_set.balls[0].initial_position;
+    Vector3 aim_point;
+    bool shot_found = false;
+    for (int i = 0; i < game->scene.table.num_pockets; i++)
+    {
+        printf("Trying pocket %d\n", i);
+        Vector3 p1 = game->scene.table.pockets[i].position;
+        Vector3 normal = Vector3_normalize(Vector3_subtract(p2, p1));
+        aim_point = Vector3_add(p2, Vector3_scalar_multiply(normal, 2 * ball->radius));
+        bool object_ball_blocked = false;
+        for (int j = 0; j < game->scene.ball_set.num_balls; j++)
+        {
+            Ball *current_ball = &(game->scene.ball_set.balls[j]);
+            if (current_ball->id == ball->id)
+            {
+                continue;
+            }
+            Vector3 p4 = current_ball->initial_position;
+            double distance;
+            Vector3 aim_line = Vector3_normalize(Vector3_subtract(aim_point, p2));
+            Vector3 aim_line_normal = Vector3_cross(aim_line, (Vector3){0, 0, 1});
+            distance = Vector3_dot(Vector3_subtract(p4, p1), aim_line_normal);
+            if (fabs(distance) < 2 * ball->radius && Vector3_dot(Vector3_subtract(p4, p1), aim_line) > 0)
+            {
+                object_ball_blocked = true;
+                printf("Object ball blocked by ball %d\n", current_ball->id);
+                break;
+            }
+        }
+        bool cue_ball_blocked = false;
+        for (int j = 0; j < game->scene.ball_set.num_balls; j++)
+        {
+            Ball *current_ball = &(game->scene.ball_set.balls[j]);
+            if (current_ball->id != 0)
+            {
+                continue;
+            }
+            Vector3 p4 = current_ball->initial_position;
+            double distance;
+            Vector3 aim_line = Vector3_normalize(Vector3_subtract(aim_point, p2));
+            Vector3 aim_line_normal = Vector3_cross(aim_line, (Vector3){0, 0, 1});
+            distance = Vector3_dot(Vector3_subtract(p4, p1), aim_line_normal);
+            if (fabs(distance) < 2 * ball->radius)
+            {
+                printf("Cue ball blocked by ball %d\n", current_ball->id);
+                cue_ball_blocked = true;
+                break;
+            }
+        }
+        bool cuttable = false;
+        double dot_product = Vector3_dot(Vector3_normalize(Vector3_subtract(p1, p2)), Vector3_normalize(Vector3_subtract(aim_point, p3)));
+
+        if (dot_product > 0)
+        {
+            cuttable = true;
+        }
+        printf("Aim point ");
+        Vector3_print(aim_point);
+
+        printf("dot product %f\n", dot_product);
+
+        if (!object_ball_blocked && !cue_ball_blocked && cuttable)
+        {
+            shot_found = true;
+            break;
+        }
+    }
+    if (!shot_found)
+    {
+        game->v = (Vector3){0, 0, 0};
+        game->w = (Vector3){0, 0, 0};
+
+        return;
+    }
+    printf("Shot found\n");
+    game->v = Vector3_scalar_multiply(Vector3_normalize(Vector3_subtract(aim_point, p3)), 500);
+    game->w = (Vector3){0, 0, 0};
+}
+
 void solve_direct_shot(Scene *scene, Vector3 initial_position, Vector3 target_position, Vector3 v_roll, Vector3 *v, Vector3 *w)
 {
     double R = scene->ball_set.balls[0].radius;
@@ -821,10 +912,13 @@ Table new_table()
     table.cushions[1] = (Cushion){{800, 100, 0}, {800, 800, 0}};
     table.cushions[2] = (Cushion){{800, 800, 0}, {100, 800, 0}};
     table.cushions[3] = (Cushion){{100, 800, 0}, {100, 100, 0}};
-    table.pockets = malloc(sizeof(Pocket));
-    table.num_pockets = 1;
-    table.pocket_capacity = 1;
-    table.pockets[0] = (Pocket){100, 100, 0, 50};
+    table.num_pockets = 4;
+    table.pockets = malloc(table.num_pockets * sizeof(Pocket));
+    table.pocket_capacity = table.num_pockets;
+    table.pockets[0] = (Pocket){100, 100, 0, 20};
+    table.pockets[1] = (Pocket){800, 100, 0, 20};
+    table.pockets[2] = (Pocket){800, 800, 0, 20};
+    table.pockets[3] = (Pocket){100, 800, 0, 20};
     return table;
 }
 
@@ -867,7 +961,9 @@ BallSet standard_ball_set()
         ball.mass = 1;
         ball.path = new_path();
         ball_set.balls[i] = ball;
+        ball_set.balls[i].pocketed = false;
     }
+    ball_set.balls[0].initial_position.x = 700;
     ball_set.balls[0].colour = 0xFFFFFF;
     ball_set.balls[1].colour = 0xFFFF00;
     ball_set.balls[2].colour = 0x0000FF;
@@ -1175,18 +1271,44 @@ bool handle_events(SDL_Event *event, Game *game)
 
 bool legal_shot(Game *game)
 {
+    Ball *cue_ball = &(game->scene.ball_set.balls[0]);
+    Ball *target_ball;
+    for (int i = 1; i < game->scene.ball_set.num_balls; i++)
+    {
+        Ball *ball = &(game->scene.ball_set.balls[i]);
+        if (!ball->pocketed)
+        {
+            target_ball = ball;
+            break;
+        }
+    }
     Shot last_shot = game->shot_history[game->num_shots - 1];
-    bool legal = false;
+    bool ball_potted = false;
+    bool legal_first_hit = false;
     for (int i = 0; i < last_shot.num_events; i++)
     {
         ShotEvent event = last_shot.events[i];
-        if (event.type == BALL_POCKETED)
+        if (event.type == BALL_BALL_COLLISION && (event.ball1->id == 0 && event.ball2->id == target_ball->id || event.ball1->id == target_ball->id && event.ball2->id == 0))
         {
-            printf("Ball pocketed\n");
-            legal = true;
+            legal_first_hit = true;
+            break;
         }
     }
-    return legal;
+    for (int i = 0; i < last_shot.num_events; i++)
+    {
+        ShotEvent event = last_shot.events[i];
+        if (event.type == BALL_POCKETED && event.ball1->id != cue_ball->id)
+        {
+            event.ball1->pocketed = true;
+            ball_potted = true;
+        }
+    }
+    if (!legal_first_hit || !ball_potted)
+    {
+        game->current_player = (game->current_player + 1) % game->num_players;
+        return false;
+    }
+    return legal_first_hit && ball_potted;
 }
 
 int main(int argc, char *argv[])
@@ -1207,7 +1329,19 @@ int main(int argc, char *argv[])
         {
             if (game->players[game->current_player].type == AI)
             {
-                solve_direct_shot(&(game->scene), game->scene.ball_set.balls[0].initial_position, (Vector3){600, 200, 0}, (Vector3){0, 50, 0}, &(game->v), &(game->w));
+                // solve_direct_shot(&(game->scene), game->scene.ball_set.balls[0].initial_position, (Vector3){600, 200, 0}, (Vector3){0, 5, 0}, &(game->v), &(game->w));
+
+                Ball *target_ball;
+                for (int i = 1; i < game->scene.ball_set.num_balls; i++)
+                {
+                    Ball *ball = &(game->scene.ball_set.balls[i]);
+                    if (!ball->pocketed)
+                    {
+                        target_ball = ball;
+                        break;
+                    }
+                }
+                pot_ball(game, target_ball);
                 clear_paths(&(game->scene));
                 generate_shot(game, game->v, game->w);
                 take_shot(game);
@@ -1222,15 +1356,7 @@ int main(int argc, char *argv[])
         }
         else if (game->state == AFTER_SHOT)
         {
-            if (!legal_shot(game))
-            {
-                printf("Foul\n");
-                game->current_player = (game->current_player + 1) % game->num_players;
-            }
-            else
-            {
-                printf("Legal shot\n");
-            }
+            legal_shot(game);
 
             game->state = BEFORE_SHOT;
             for (int i = 0; i < game->scene.ball_set.num_balls; i++)
