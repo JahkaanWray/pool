@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
-#include <SDL2/SDL.h>
+#include <raylib.h>
 #include <complex.h>
 #include "vector3.h"
 #include "polynomial.h"
@@ -52,7 +52,7 @@ typedef struct
 {
     int id;
     Vector3 initial_position;
-    long colour;
+    Color colour;
     double radius;
     double mass;
     Path path;
@@ -694,35 +694,33 @@ void generate_paths(Game *game, Ball *ball, Vector3 initial_position, Vector3 in
         ;
 }
 
-void render_path_segment(SDL_Renderer *renderer, PathSegment segment)
+void render_path_segment(PathSegment segment)
 {
     if (segment.rolling)
     {
-        SDL_SetRenderDrawColor(renderer, 0, 0, 255, 255);
         Vector3 p1 = segment.initial_position;
         Vector3 p2 = get_position(segment, segment.end_time);
-        SDL_RenderDrawLine(renderer, p1.x, p1.y, p2.x, p2.y);
+        DrawLine(p1.x, p1.y, p2.x, p2.y, BLUE);
     }
     else
     {
-        SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
         for (int i = 0; i < 100; i++)
         {
             double t1 = segment.start_time + i * (segment.end_time - segment.start_time) / 100;
             double t2 = segment.start_time + (i + 1) * (segment.end_time - segment.start_time) / 100;
             Vector3 p1 = get_position(segment, t1);
             Vector3 p2 = get_position(segment, t2);
-            SDL_RenderDrawLine(renderer, p1.x, p1.y, p2.x, p2.y);
+            DrawLine(p1.x, p1.y, p2.x, p2.y, RED);
         }
     }
 }
 
-void render_path(SDL_Renderer *renderer, Path path)
+void render_path(Path path)
 {
     for (int i = 0; i < path.num_segments; i++)
     {
         PathSegment segment = path.segments[i];
-        render_path_segment(renderer, segment);
+        render_path_segment(segment);
     }
 }
 
@@ -922,18 +920,17 @@ Table new_table()
     return table;
 }
 
-void render_table(SDL_Renderer *renderer, Table table)
+void render_table(Table table)
 {
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     for (int i = 0; i < table.num_cushions; i++)
     {
         Cushion cushion = table.cushions[i];
-        SDL_RenderDrawLine(renderer, cushion.p1.x, cushion.p1.y, cushion.p2.x, cushion.p2.y);
+        DrawLine(cushion.p1.x, cushion.p1.y, cushion.p2.x, cushion.p2.y, BLACK);
     }
     for (int i = 0; i < table.num_pockets; i++)
     {
         Pocket pocket = table.pockets[i];
-        SDL_RenderFillRect(renderer, &(SDL_Rect){pocket.position.x - pocket.radius, pocket.position.y - pocket.radius, 2 * pocket.radius, 2 * pocket.radius});
+        DrawCircle(pocket.position.x, pocket.position.y, pocket.radius, BLACK);
     }
 }
 
@@ -964,16 +961,16 @@ BallSet standard_ball_set()
         ball_set.balls[i].pocketed = false;
     }
     ball_set.balls[0].initial_position.x = 700;
-    ball_set.balls[0].colour = 0xFFFFFF;
-    ball_set.balls[1].colour = 0xFFFF00;
-    ball_set.balls[2].colour = 0x0000FF;
-    ball_set.balls[3].colour = 0xFF0000;
-    ball_set.balls[4].colour = 0xFF00FF;
-    ball_set.balls[5].colour = 0xFFF000;
-    ball_set.balls[6].colour = 0x00FF00;
-    ball_set.balls[7].colour = 0x00FFFF;
-    ball_set.balls[8].colour = 0x000000;
-    ball_set.balls[9].colour = 0xAAAA00;
+    ball_set.balls[0].colour = WHITE;
+    ball_set.balls[1].colour = YELLOW;
+    ball_set.balls[2].colour = BLUE;
+    ball_set.balls[3].colour = RED;
+    ball_set.balls[4].colour = PURPLE;
+    ball_set.balls[5].colour = ORANGE;
+    ball_set.balls[6].colour = GREEN;
+    ball_set.balls[7].colour = MAROON;
+    ball_set.balls[8].colour = BLACK;
+    ball_set.balls[9].colour = YELLOW;
 
     return ball_set;
 }
@@ -987,7 +984,7 @@ BallSet test_ball_set()
     Ball ball1;
     ball1.id = 0;
     ball1.initial_position = (Vector3){500, 200, 0};
-    ball1.colour = 0xFF0000;
+    ball1.colour = RED;
     ball1.radius = 5;
     ball1.mass = 1;
     ball1.path = new_path();
@@ -995,7 +992,7 @@ BallSet test_ball_set()
     Ball ball2;
     ball2.id = 1;
     ball2.initial_position = (Vector3){500, 650, 0};
-    ball2.colour = 0x0000FF;
+    ball2.colour = BLUE;
     ball2.radius = 5;
     ball2.mass = 1;
     ball2.path = new_path();
@@ -1027,26 +1024,25 @@ Vector3 get_ball_position(Ball ball, double time)
     return ball.initial_position;
 }
 
-void render_ball(SDL_Renderer *renderer, Ball ball, double time)
+void render_ball(Ball ball, double time)
 {
-    SDL_SetRenderDrawColor(renderer, (ball.colour >> 16) & 0xFF, (ball.colour >> 8) & 0xFF, ball.colour & 0xFF, 255);
     Vector3 position = get_ball_position(ball, time);
-    SDL_RenderFillRect(renderer, &(SDL_Rect){position.x - ball.radius, position.y - ball.radius, 2 * ball.radius, 2 * ball.radius});
-    render_path(renderer, ball.path);
+    DrawCircle(position.x, position.y, ball.radius, ball.colour);
+    render_path(ball.path);
 }
 
-void render_ball_set(SDL_Renderer *renderer, BallSet ball_set, double time)
+void render_ball_set(BallSet ball_set, double time)
 {
     for (int i = 0; i < ball_set.num_balls; i++)
     {
-        render_ball(renderer, ball_set.balls[i], time);
+        render_ball(ball_set.balls[i], time);
     }
 }
 
-void render_scene(SDL_Renderer *renderer, Scene scene, double time)
+void render_scene(Scene scene, double time)
 {
-    render_table(renderer, scene.table);
-    render_ball_set(renderer, scene.ball_set, time);
+    render_table(scene.table);
+    render_ball_set(scene.ball_set, time);
 }
 
 Scene new_scene()
@@ -1069,22 +1065,20 @@ Scene new_scene()
     return scene;
 }
 
-void render_UI(SDL_Renderer *renderer, Vector3 v, Vector3 w)
+void render_UI(Vector3 v, Vector3 w)
 {
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-    SDL_RenderFillRect(renderer, &(SDL_Rect){0, 700, 100, 100});
-    SDL_RenderFillRect(renderer, &(SDL_Rect){0, 800, 100, 100});
-    SDL_RenderFillRect(renderer, &(SDL_Rect){1540, 0, 100, 900});
-    SDL_RenderFillRect(renderer, &(SDL_Rect){1440, 0, 100, 900});
-    SDL_SetRenderDrawColor(renderer, 180, 0, 180, 255);
-    SDL_RenderFillRect(renderer, &(SDL_Rect){1550, 890 - (int)Vector3_mag(w), 80, (int)Vector3_mag(w)});
-    SDL_RenderFillRect(renderer, &(SDL_Rect){1450, 890 - (int)Vector3_mag(v), 80, (int)Vector3_mag(v)});
+    DrawRectangle(0, 700, 100, 100, BLACK);
+    DrawRectangle(0, 800, 100, 100, BLACK);
+    DrawRectangle(1540, 0, 100, 900, BLACK);
+    DrawRectangle(1440, 0, 100, 900, BLACK);
 
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    DrawRectangle(1550, 890 - (int)Vector3_mag(w), 80, (int)Vector3_mag(w), PINK);
+    DrawRectangle(1450, 890 - (int)Vector3_mag(v), 80, (int)Vector3_mag(v), PINK);
+
     Vector3 v_normalized = Vector3_normalize(v);
     Vector3 w_normalized = Vector3_normalize(w);
-    SDL_RenderDrawLine(renderer, 50, 750, 50 + 50 * v_normalized.x, 750 + 50 * v_normalized.y);
-    SDL_RenderDrawLine(renderer, 50, 850, 50 + 50 * w_normalized.x, 850 + 50 * w_normalized.y);
+    DrawLine(50, 750, 50 + 50 * v_normalized.x, 750 + 50 * v_normalized.y, WHITE);
+    DrawLine(50, 850, 50 + 50 * w_normalized.x, 850 + 50 * w_normalized.y, WHITE);
 }
 
 void generate_shot(Game *game, Vector3 velocity, Vector3 angular_velocity)
@@ -1159,114 +1153,11 @@ void free_game(Game *game)
     free(game);
 }
 
-void render_game(SDL_Renderer *renderer, Game *game)
+void render_game(Game *game)
 {
-    SDL_SetRenderDrawColor(renderer, 0, 180, 0, 255);
-    SDL_RenderClear(renderer);
-    render_scene(renderer, game->scene, game->time);
-    render_UI(renderer, game->v, game->w);
-}
-
-bool handle_events(SDL_Event *event, Game *game)
-{
-    while (SDL_PollEvent(event))
-    {
-        if (event->type == SDL_QUIT)
-        {
-            printf("Quit\n");
-            return true;
-        }
-        else if (event->type == SDL_KEYDOWN)
-        {
-            if (event->key.keysym.sym == SDLK_ESCAPE)
-            {
-                return true;
-            }
-            else if (event->key.keysym.sym == SDLK_UP)
-            {
-                if (game->state == DURING_SHOT)
-                {
-                    game->playback_speed += 0.2;
-                }
-            }
-            else if (event->key.keysym.sym == SDLK_DOWN)
-            {
-                if (game->state == DURING_SHOT)
-                {
-                    game->playback_speed -= 0.2;
-                }
-            }
-            else if (event->key.keysym.sym == SDLK_RETURN)
-            {
-                if (game->state == BEFORE_SHOT)
-                {
-                    if (game->players[game->current_player].type == HUMAN)
-                    {
-                        take_shot(game);
-                        game->state = DURING_SHOT;
-                        game->time = 0;
-                        game->playback_speed = 1;
-
-                        printf("Number of shots taken : %d\n", game->num_shots);
-                    }
-                }
-                else if (game->state == DURING_SHOT)
-                {
-                    game->state = AFTER_SHOT;
-                }
-                else if (game->state == AFTER_SHOT)
-                {
-                    game->state = BEFORE_SHOT;
-                }
-            }
-        }
-        else if (event->type == SDL_MOUSEMOTION)
-        {
-            if (game->state == BEFORE_SHOT)
-            {
-                if (game->players[game->current_player].type == HUMAN)
-                {
-                    int mx, my;
-                    mx = 400;
-                    my = 400;
-                    Uint32 mouseState = SDL_GetMouseState(&mx, &my);
-                    if (mx > 1450 && mx < 1530 && my > 10 && my < 890)
-                    {
-                        game->v = Vector3_scalar_multiply(Vector3_normalize(game->v), 890 - my);
-                    }
-                    if (mx > 1550 && mx < 1630 && my > 10 && my < 890)
-                    {
-                        game->w = Vector3_scalar_multiply(Vector3_normalize(game->w), 890 - my);
-                    }
-                    if (mx > 0 && mx < 100 && my > 700 && my < 800)
-                    {
-                        double v_mag = Vector3_mag(game->v);
-                        game->v = Vector3_normalize((Vector3){mx - 50, my - 750, 0});
-                        game->v = Vector3_scalar_multiply(game->v, v_mag);
-                    }
-                    if (mx > 0 && mx < 100 && my > 800 && my < 900)
-                    {
-                        double w_mag = Vector3_mag(game->w);
-                        game->w = Vector3_normalize((Vector3){mx - 50, my - 850, 0});
-                        game->w = Vector3_scalar_multiply(game->w, w_mag);
-                    }
-                    // solve_direct_shot(&scene, scene.ball_set.balls[0].initial_position, target_position, v_roll, &required_velocity, &required_angular_velocity);
-                    game->v = Vector3_subtract((Vector3){mx, my, 0}, game->scene.ball_set.balls[0].initial_position);
-                    clear_paths(&(game->scene));
-                    generate_shot(game, game->v, game->w);
-                    game->time = 0;
-                    game->playback_speed = 0;
-                }
-            }
-            else if (game->state == DURING_SHOT)
-            {
-            }
-            else if (game->state == AFTER_SHOT)
-            {
-            }
-        }
-    }
-    return false;
+    ClearBackground(GREEN);
+    render_scene(game->scene, game->time);
+    render_UI(game->v, game->w);
 }
 
 bool legal_shot(Game *game)
@@ -1310,77 +1201,144 @@ bool legal_shot(Game *game)
     }
     return legal_first_hit && ball_potted;
 }
-
-int main(int argc, char *argv[])
+bool update_game(Game *game)
 {
-    SDL_Init(SDL_INIT_VIDEO);
-    SDL_Window *window = SDL_CreateWindow("SDL2 Window", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 1640, 900, 0);
-    SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
-
-    Game *game = new_game();
-
-    bool quit = false;
-    SDL_Event event;
-    while (!quit)
+    if (IsKeyPressed(KEY_UP))
     {
-        quit = handle_events(&event, game);
-
+        if (game->state == DURING_SHOT)
+        {
+            game->playback_speed += 0.2;
+        }
+    }
+    else if (IsKeyPressed(KEY_DOWN))
+    {
+        if (game->state == DURING_SHOT)
+        {
+            game->playback_speed -= 0.2;
+        }
+    }
+    else if (IsKeyPressed(KEY_ENTER))
+    {
         if (game->state == BEFORE_SHOT)
         {
-            if (game->players[game->current_player].type == AI)
+            if (game->players[game->current_player].type == HUMAN)
             {
-                // solve_direct_shot(&(game->scene), game->scene.ball_set.balls[0].initial_position, (Vector3){600, 200, 0}, (Vector3){0, 5, 0}, &(game->v), &(game->w));
-
-                Ball *target_ball;
-                for (int i = 1; i < game->scene.ball_set.num_balls; i++)
-                {
-                    Ball *ball = &(game->scene.ball_set.balls[i]);
-                    if (!ball->pocketed)
-                    {
-                        target_ball = ball;
-                        break;
-                    }
-                }
-                pot_ball(game, target_ball);
-                clear_paths(&(game->scene));
-                generate_shot(game, game->v, game->w);
                 take_shot(game);
+                game->state = DURING_SHOT;
                 game->time = 0;
                 game->playback_speed = 1;
-                game->state = DURING_SHOT;
+
+                printf("Number of shots taken : %d\n", game->num_shots);
             }
         }
         else if (game->state == DURING_SHOT)
         {
-            game->time += game->playback_speed / 60;
+            game->state = AFTER_SHOT;
         }
         else if (game->state == AFTER_SHOT)
         {
-            legal_shot(game);
-
             game->state = BEFORE_SHOT;
-            for (int i = 0; i < game->scene.ball_set.num_balls; i++)
+        }
+    }
+    if (game->state == BEFORE_SHOT)
+    {
+        if (game->players[game->current_player].type == HUMAN)
+        {
+            int mx, my;
+            Vector2 mouse_position = GetMousePosition();
+            mx = mouse_position.x;
+            my = mouse_position.y;
+            if (mx > 1450 && mx < 1530 && my > 10 && my < 890)
             {
-                Ball *ball = &(game->scene.ball_set.balls[i]);
-                ball->initial_position = get_ball_position(*ball, game->time);
-                ball->path.num_segments = 0;
+                game->v = Vector3_scalar_multiply(Vector3_normalize(game->v), 890 - my);
             }
+            if (mx > 1550 && mx < 1630 && my > 10 && my < 890)
+            {
+                game->w = Vector3_scalar_multiply(Vector3_normalize(game->w), 890 - my);
+            }
+            if (mx > 0 && mx < 100 && my > 700 && my < 800)
+            {
+                double v_mag = Vector3_mag(game->v);
+                game->v = Vector3_normalize((Vector3){mx - 50, my - 750, 0});
+                game->v = Vector3_scalar_multiply(game->v, v_mag);
+            }
+            if (mx > 0 && mx < 100 && my > 800 && my < 900)
+            {
+                double w_mag = Vector3_mag(game->w);
+                game->w = Vector3_normalize((Vector3){mx - 50, my - 850, 0});
+                game->w = Vector3_scalar_multiply(game->w, w_mag);
+            }
+            // solve_direct_shot(&scene, scene.ball_set.balls[0].initial_position, target_position, v_roll, &required_velocity, &required_angular_velocity);
+            game->v = Vector3_subtract((Vector3){mx, my, 0}, game->scene.ball_set.balls[0].initial_position);
             clear_paths(&(game->scene));
+            generate_shot(game, game->v, game->w);
             game->time = 0;
             game->playback_speed = 0;
         }
+        else if (game->players[game->current_player].type == AI)
+        {
+            // solve_direct_shot(&(game->scene), game->scene.ball_set.balls[0].initial_position, (Vector3){600, 200, 0}, (Vector3){0, 5, 0}, &(game->v), &(game->w));
 
-        render_game(renderer, game);
-        SDL_RenderPresent(renderer);
+            Ball *target_ball;
+            for (int i = 1; i < game->scene.ball_set.num_balls; i++)
+            {
+                Ball *ball = &(game->scene.ball_set.balls[i]);
+                if (!ball->pocketed)
+                {
+                    target_ball = ball;
+                    break;
+                }
+            }
+            pot_ball(game, target_ball);
+            clear_paths(&(game->scene));
+            generate_shot(game, game->v, game->w);
+            take_shot(game);
+            game->time = 0;
+            game->playback_speed = 1;
+            game->state = DURING_SHOT;
+        }
     }
-    free_game(game);
-    printf("Game freed\n");
-    SDL_DestroyRenderer(renderer);
-    printf("Renderer destroyed\n");
-    SDL_DestroyWindow(window);
-    printf("Window destroyed\n");
-    SDL_Quit();
-    printf("Quit\n");
+    else if (game->state == DURING_SHOT)
+    {
+        game->time += game->playback_speed / 60;
+    }
+    else if (game->state == AFTER_SHOT)
+    {
+        legal_shot(game);
 
+        game->state = BEFORE_SHOT;
+        for (int i = 0; i < game->scene.ball_set.num_balls; i++)
+        {
+            Ball *ball = &(game->scene.ball_set.balls[i]);
+            ball->initial_position = get_ball_position(*ball, game->time);
+            ball->path.num_segments = 0;
+        }
+        clear_paths(&(game->scene));
+        game->time = 0;
+        game->playback_speed = 0;
+    }
+}
+
+int main(int argc, char *argv[])
+{
+    const int SCREEN_WIDTH = 1600;
+    const int SCREEN_HEIGHT = 900;
+
+    InitWindow(SCREEN_HEIGHT, SCREEN_WIDTH, "Pool");
+
+    SetTargetFPS(60);
+    Game *game = new_game();
+
+    while (!WindowShouldClose())
+    {
+        update_game(game);
+        BeginDrawing();
+        render_game(game);
+        EndDrawing();
+    }
+
+    free_game(game);
+
+    CloseWindow();
     return 0;
 }

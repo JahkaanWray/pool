@@ -2,6 +2,7 @@
     "files.associations": {
         "sdl.h": "c",
         "complex.h": "c",
-        "structs.c": "c"
+        "structs.c": "c",
+        "raylib.h": "c"
     }
 }

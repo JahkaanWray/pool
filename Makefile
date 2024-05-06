@@ -1,10 +1,10 @@
 all: main polytest
 
 vector: src/vector3.c
-	gcc -c src/vector3.c -lm -g
+	gcc -c src/vector3.c -lm -lraylib -g
 
 main: src/main.c vector poly
-	gcc -o main src/main.c vector3.o  polynomial.o -lm -lSDL2 -g
+	gcc -o main src/main.c vector3.o  polynomial.o -lm -lraylib -lSDL2 -g
 
 main2: src/main2.c vector poly
 	gcc -o main2 src/main2.c vector3.o  polynomial.o -lm -lSDL2 -g
