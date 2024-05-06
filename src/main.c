@@ -3,8 +3,8 @@
 #include <stdio.h>
 #include <math.h>
 #include <raylib.h>
+#include <raymath.h>
 #include <complex.h>
-#include "vector3.h"
 #include "polynomial.h"
 
 typedef struct
@@ -179,9 +179,9 @@ Vector3 get_position(PathSegment segment, double time)
     }
     if (time > segment.end_time)
     {
-        return Vector3_add(segment.initial_position, Vector3_add(Vector3_scalar_multiply(segment.initial_velocity, segment.end_time - segment.start_time), Vector3_scalar_multiply(segment.acceleration, 0.5 * (segment.end_time - segment.start_time) * (segment.end_time - segment.start_time))));
+        return Vector3Add(segment.initial_position, Vector3Add(Vector3Scale(segment.initial_velocity, segment.end_time - segment.start_time), Vector3Scale(segment.acceleration, 0.5 * (segment.end_time - segment.start_time) * (segment.end_time - segment.start_time))));
     }
-    Vector3 p = Vector3_add(segment.initial_position, Vector3_add(Vector3_scalar_multiply(segment.initial_velocity, time - segment.start_time), Vector3_scalar_multiply(segment.acceleration, 0.5 * (time - segment.start_time) * (time - segment.start_time))));
+    Vector3 p = Vector3Add(segment.initial_position, Vector3Add(Vector3Scale(segment.initial_velocity, time - segment.start_time), Vector3Scale(segment.acceleration, 0.5 * (time - segment.start_time) * (time - segment.start_time))));
     return p;
 }
 
@@ -193,9 +193,9 @@ Vector3 get_velocity(PathSegment segment, double time)
     }
     if (time > segment.end_time)
     {
-        return Vector3_add(segment.initial_velocity, Vector3_scalar_multiply(segment.acceleration, segment.end_time - segment.start_time));
+        return Vector3Add(segment.initial_velocity, Vector3Scale(segment.acceleration, segment.end_time - segment.start_time));
     }
-    Vector3 v = Vector3_add(segment.initial_velocity, Vector3_scalar_multiply(segment.acceleration, time - segment.start_time));
+    Vector3 v = Vector3Add(segment.initial_velocity, Vector3Scale(segment.acceleration, time - segment.start_time));
     return v;
 }
 
@@ -207,9 +207,9 @@ Vector3 get_angular_velocity(PathSegment segment, double time)
     }
     if (time > segment.end_time)
     {
-        return Vector3_add(segment.initial_angular_velocity, Vector3_scalar_multiply(segment.angular_acceleration, segment.end_time - segment.start_time));
+        return Vector3Add(segment.initial_angular_velocity, Vector3Scale(segment.angular_acceleration, segment.end_time - segment.start_time));
     }
-    return Vector3_add(segment.initial_angular_velocity, Vector3_scalar_multiply(segment.angular_acceleration, time - segment.start_time));
+    return Vector3Add(segment.initial_angular_velocity, Vector3Scale(segment.angular_acceleration, time - segment.start_time));
 }
 void print_path(Path path)
 {
@@ -262,10 +262,10 @@ void add_sliding_segment(Ball *ball, Vector3 initial_position, Vector3 initial_v
     double mu_roll = coefficients.mu_roll;
     double g = coefficients.g;
     double R = ball->radius;
-    Vector3 contact_point_v = Vector3_subtract(initial_velocity, Vector3_cross(initial_angular_velocity, (Vector3){0, 0, R}));
-    Vector3 acceleration = Vector3_scalar_multiply(Vector3_normalize(contact_point_v), -mu_slide * g);
-    Vector3 angular_acceleration = Vector3_scalar_multiply(Vector3_cross(acceleration, (Vector3){0, 0, -1}), -2.5 / R);
-    double end_time = start_time + 2 * Vector3_mag(contact_point_v) / (7 * mu_slide * g);
+    Vector3 contact_point_v = Vector3Subtract(initial_velocity, Vector3CrossProduct(initial_angular_velocity, (Vector3){0, 0, R}));
+    Vector3 acceleration = Vector3Scale(Vector3Normalize(contact_point_v), -mu_slide * g);
+    Vector3 angular_acceleration = Vector3Scale(Vector3CrossProduct(acceleration, (Vector3){0, 0, -1}), -2.5 / R);
+    double end_time = start_time + 2 * Vector3Length(contact_point_v) / (7 * mu_slide * g);
     PathSegment segment = {initial_position, initial_velocity, acceleration, initial_angular_velocity, angular_acceleration, false, start_time, end_time};
     ball->path.segments[ball->path.num_segments - 1].end_time = start_time;
     add_segment(&(ball->path), segment);
@@ -276,10 +276,10 @@ void add_rolling_segment(Ball *ball, Vector3 initial_position, Vector3 initial_v
     double mu_roll = coefficients.mu_roll;
     double g = coefficients.g;
     double R = ball->radius;
-    Vector3 acceleration = Vector3_scalar_multiply(Vector3_normalize(initial_velocity), -mu_roll * g);
-    Vector3 initial_angular_velocity = Vector3_cross(initial_velocity, (Vector3){0, 0, -1 / R});
-    Vector3 angular_acceleration = Vector3_scalar_multiply(Vector3_cross(acceleration, (Vector3){0, 0, -1}), 1 / R);
-    double end_time = start_time + Vector3_mag(initial_velocity) / (mu_roll * g);
+    Vector3 acceleration = Vector3Scale(Vector3Normalize(initial_velocity), -mu_roll * g);
+    Vector3 initial_angular_velocity = Vector3CrossProduct(initial_velocity, (Vector3){0, 0, -1 / R});
+    Vector3 angular_acceleration = Vector3Scale(Vector3CrossProduct(acceleration, (Vector3){0, 0, -1}), 1 / R);
+    double end_time = start_time + Vector3Length(initial_velocity) / (mu_roll * g);
     PathSegment segment = {initial_position, initial_velocity, acceleration, initial_angular_velocity, angular_acceleration, true, start_time, end_time};
     add_segment(&(ball->path), segment);
 }
@@ -298,11 +298,11 @@ bool detect_ball_cushion_collision(Ball ball, Cushion line_segment, double *t)
     Vector3 p1 = segment->initial_position;
     Vector3 v1 = segment->initial_velocity;
     Vector3 w1 = segment->initial_angular_velocity;
-    Vector3 line_normal = Vector3_normalize(Vector3_cross(Vector3_subtract(line_segment.p2, line_segment.p1), (Vector3){0, 0, 1}));
-    double sn = Vector3_dot(Vector3_subtract(line_segment.p1, p1), line_normal);
-    double vn = Vector3_dot(v1, line_normal);
+    Vector3 line_normal = Vector3Normalize(Vector3CrossProduct(Vector3Subtract(line_segment.p2, line_segment.p1), (Vector3){0, 0, 1}));
+    double sn = Vector3DotProduct(Vector3Subtract(line_segment.p1, p1), line_normal);
+    double vn = Vector3DotProduct(v1, line_normal);
     Vector3 a = segment->acceleration;
-    double an = Vector3_dot(a, line_normal);
+    double an = Vector3DotProduct(a, line_normal);
     if (an == 0)
     {
         collision_time = segment->start_time + (sn / vn);
@@ -485,22 +485,22 @@ void resolve_ball_ball_collision(Ball *ball1, Ball *ball2, double time, Coeffici
     Vector3 v2 = get_velocity(*segment2, time);
     Vector3 w1 = get_angular_velocity(*segment1, time);
     Vector3 w2 = get_angular_velocity(*segment2, time);
-    Vector3 normal = Vector3_normalize(Vector3_subtract(p2, p1));
-    Vector3 tangent = Vector3_cross(normal, (Vector3){0, 0, 1});
+    Vector3 normal = Vector3Normalize(Vector3Subtract(p2, p1));
+    Vector3 tangent = Vector3CrossProduct(normal, (Vector3){0, 0, 1});
     double e = coefficients.e_ball_ball;
     double m1 = ball1->mass;
     double m2 = ball2->mass;
-    double v1n = Vector3_dot(v1, normal);
-    double v2n = Vector3_dot(v2, normal);
-    double v1t = Vector3_dot(v1, tangent);
-    double v2t = Vector3_dot(v2, tangent);
+    double v1n = Vector3DotProduct(v1, normal);
+    double v2n = Vector3DotProduct(v2, normal);
+    double v1t = Vector3DotProduct(v1, tangent);
+    double v2t = Vector3DotProduct(v2, tangent);
     double v1n_final = (v1n * (m1 - e * m2) + 2 * e * m2 * v2n) / (m1 + m2);
     double v2n_final = (v2n * (m2 - e * m1) + 2 * e * m1 * v1n) / (m1 + m2);
     double v1t_final = v1t;
     double v2t_final = v2t;
 
-    Vector3 v1_final = Vector3_add(Vector3_scalar_multiply(normal, v1n_final), Vector3_scalar_multiply(tangent, v1t_final));
-    Vector3 v2_final = Vector3_add(Vector3_scalar_multiply(normal, v2n_final), Vector3_scalar_multiply(tangent, v2t_final));
+    Vector3 v1_final = Vector3Add(Vector3Scale(normal, v1n_final), Vector3Scale(tangent, v1t_final));
+    Vector3 v2_final = Vector3Add(Vector3Scale(normal, v2n_final), Vector3Scale(tangent, v2t_final));
     add_sliding_segment(ball1, p1, v1_final, w1, time, coefficients);
     add_sliding_segment(ball2, p2, v2_final, w2, time, coefficients);
 }
@@ -511,14 +511,14 @@ void resolve_ball_cushion_collision(Ball *ball, Cushion cushion, double time, Co
     Vector3 p = get_position(*segment, time);
     Vector3 v = get_velocity(*segment, time);
     Vector3 w = get_angular_velocity(*segment, time);
-    Vector3 normal = Vector3_normalize(Vector3_cross(Vector3_subtract(cushion.p2, cushion.p1), (Vector3){0, 0, 1}));
-    Vector3 tangent = Vector3_cross(normal, (Vector3){0, 0, 1});
+    Vector3 normal = Vector3Normalize(Vector3CrossProduct(Vector3Subtract(cushion.p2, cushion.p1), (Vector3){0, 0, 1}));
+    Vector3 tangent = Vector3CrossProduct(normal, (Vector3){0, 0, 1});
     double e = coefficients.e_ball_cushion;
-    double v_n = Vector3_dot(v, normal);
-    double v_t = Vector3_dot(v, tangent);
+    double v_n = Vector3DotProduct(v, normal);
+    double v_t = Vector3DotProduct(v, tangent);
     double v_n_final = -e * v_n;
     double v_t_final = v_t;
-    Vector3 v_final = Vector3_add(Vector3_scalar_multiply(normal, v_n_final), Vector3_scalar_multiply(tangent, v_t_final));
+    Vector3 v_final = Vector3Add(Vector3Scale(normal, v_n_final), Vector3Scale(tangent, v_t_final));
     add_sliding_segment(ball, p, v_final, w, time, coefficients);
 }
 
@@ -532,7 +532,7 @@ void resolve_ball_pocket_collision(Ball *ball, Pocket pocket, double time, Coeff
     }
     else
     {
-        p = Vector3_add((Vector3){1000, 200, 0}, Vector3_scalar_multiply((Vector3){0, 50, 0}, ball->id));
+        p = Vector3Add((Vector3){1000, 200, 0}, Vector3Scale((Vector3){0, 50, 0}, ball->id));
     }
     Vector3 v = {0, 0, 0};
     Vector3 w = {0, 0, 0};
@@ -683,11 +683,11 @@ void generate_paths(Game *game, Ball *ball, Vector3 initial_position, Vector3 in
     double R = ball->radius;
     double end_time;
 
-    Vector3 contact_point_v = Vector3_subtract(initial_velocity, Vector3_cross(initial_angular_velocity, (Vector3){0, 0, R}));
-    Vector3 acceleration = Vector3_scalar_multiply(Vector3_normalize(contact_point_v), -mu_slide * g);
-    Vector3 angular_acceleration = Vector3_scalar_multiply(Vector3_cross(acceleration, (Vector3){0, 0, -1}), -2.5 / R);
+    Vector3 contact_point_v = Vector3Subtract(initial_velocity, Vector3CrossProduct(initial_angular_velocity, (Vector3){0, 0, R}));
+    Vector3 acceleration = Vector3Scale(Vector3Normalize(contact_point_v), -mu_slide * g);
+    Vector3 angular_acceleration = Vector3Scale(Vector3CrossProduct(acceleration, (Vector3){0, 0, -1}), -2.5 / R);
 
-    end_time = start_time + 2 * Vector3_mag(contact_point_v) / (7 * mu_slide * g);
+    end_time = start_time + 2 * Vector3Length(contact_point_v) / (7 * mu_slide * g);
     PathSegment segment = {initial_position, initial_velocity, acceleration, initial_angular_velocity, angular_acceleration, false, start_time, end_time};
     add_segment(&(ball->path), segment);
     while (update_path(game))
@@ -734,8 +734,8 @@ void pot_ball(Game *game, Ball *ball)
     {
         printf("Trying pocket %d\n", i);
         Vector3 p1 = game->scene.table.pockets[i].position;
-        Vector3 normal = Vector3_normalize(Vector3_subtract(p2, p1));
-        aim_point = Vector3_add(p2, Vector3_scalar_multiply(normal, 2 * ball->radius));
+        Vector3 normal = Vector3Normalize(Vector3Subtract(p2, p1));
+        aim_point = Vector3Add(p2, Vector3Scale(normal, 2 * ball->radius));
         bool object_ball_blocked = false;
         for (int j = 0; j < game->scene.ball_set.num_balls; j++)
         {
@@ -746,10 +746,10 @@ void pot_ball(Game *game, Ball *ball)
             }
             Vector3 p4 = current_ball->initial_position;
             double distance;
-            Vector3 aim_line = Vector3_normalize(Vector3_subtract(aim_point, p2));
-            Vector3 aim_line_normal = Vector3_cross(aim_line, (Vector3){0, 0, 1});
-            distance = Vector3_dot(Vector3_subtract(p4, p1), aim_line_normal);
-            if (fabs(distance) < 2 * ball->radius && Vector3_dot(Vector3_subtract(p4, p1), aim_line) > 0)
+            Vector3 aim_line = Vector3Normalize(Vector3Subtract(aim_point, p2));
+            Vector3 aim_line_normal = Vector3CrossProduct(aim_line, (Vector3){0, 0, 1});
+            distance = Vector3DotProduct(Vector3Subtract(p4, p1), aim_line_normal);
+            if (fabs(distance) < 2 * ball->radius && Vector3DotProduct(Vector3Subtract(p4, p1), aim_line) > 0)
             {
                 object_ball_blocked = true;
                 printf("Object ball blocked by ball %d\n", current_ball->id);
@@ -766,9 +766,9 @@ void pot_ball(Game *game, Ball *ball)
             }
             Vector3 p4 = current_ball->initial_position;
             double distance;
-            Vector3 aim_line = Vector3_normalize(Vector3_subtract(aim_point, p2));
-            Vector3 aim_line_normal = Vector3_cross(aim_line, (Vector3){0, 0, 1});
-            distance = Vector3_dot(Vector3_subtract(p4, p1), aim_line_normal);
+            Vector3 aim_line = Vector3Normalize(Vector3Subtract(aim_point, p2));
+            Vector3 aim_line_normal = Vector3CrossProduct(aim_line, (Vector3){0, 0, 1});
+            distance = Vector3DotProduct(Vector3Subtract(p4, p1), aim_line_normal);
             if (fabs(distance) < 2 * ball->radius)
             {
                 printf("Cue ball blocked by ball %d\n", current_ball->id);
@@ -777,16 +777,12 @@ void pot_ball(Game *game, Ball *ball)
             }
         }
         bool cuttable = false;
-        double dot_product = Vector3_dot(Vector3_normalize(Vector3_subtract(p1, p2)), Vector3_normalize(Vector3_subtract(aim_point, p3)));
+        double dot_product = Vector3DotProduct(Vector3Normalize(Vector3Subtract(p1, p2)), Vector3Normalize(Vector3Subtract(aim_point, p3)));
 
         if (dot_product > 0)
         {
             cuttable = true;
         }
-        printf("Aim point ");
-        Vector3_print(aim_point);
-
-        printf("dot product %f\n", dot_product);
 
         if (!object_ball_blocked && !cue_ball_blocked && cuttable)
         {
@@ -802,7 +798,7 @@ void pot_ball(Game *game, Ball *ball)
         return;
     }
     printf("Shot found\n");
-    game->v = Vector3_scalar_multiply(Vector3_normalize(Vector3_subtract(aim_point, p3)), 500);
+    game->v = Vector3Scale(Vector3Normalize(Vector3Subtract(aim_point, p3)), 500);
     game->w = (Vector3){0, 0, 0};
 }
 
@@ -813,14 +809,12 @@ void solve_direct_shot(Scene *scene, Vector3 initial_position, Vector3 target_po
     double mu_roll = scene->coefficients.mu_roll;
     double g = scene->coefficients.g;
 
-    Vector3 roll_position = Vector3_subtract(target_position, Vector3_scalar_multiply(v_roll, Vector3_mag(v_roll) / (2 * mu_roll * g)));
-    Vector3 w_roll = Vector3_cross(v_roll, (Vector3){0, 0, -1 / R});
-    printf("Ball must start rolling at ");
-    Vector3_print(roll_position);
+    Vector3 roll_position = Vector3Subtract(target_position, Vector3Scale(v_roll, Vector3Length(v_roll) / (2 * mu_roll * g)));
+    Vector3 w_roll = Vector3CrossProduct(v_roll, (Vector3){0, 0, -1 / R});
 
     double a = 0.25 * mu_slide * mu_slide * g * g;
     double b = 0;
-    double c = -Vector3_mag(v_roll) * Vector3_mag(v_roll);
+    double c = -Vector3Length(v_roll) * Vector3Length(v_roll);
     double d = 2 * v_roll.x * (roll_position.x - initial_position.x) + 2 * v_roll.y * (roll_position.y - initial_position.y);
     double e = -(initial_position.x - roll_position.x) * (initial_position.x - roll_position.x) - (initial_position.y - roll_position.y) * (initial_position.y - roll_position.y);
 
@@ -846,27 +840,15 @@ void solve_direct_shot(Scene *scene, Vector3 initial_position, Vector3 target_po
         t = x4;
     }
     printf("%f\n", t);
-    printf("Not accounting for acceleration the ball would be at ");
-    Vector3_print(Vector3_subtract(roll_position, Vector3_scalar_multiply(v_roll, t)));
-    printf("Acceleration must cause ball to travel ");
-    Vector3_print(Vector3_subtract(Vector3_subtract(roll_position, Vector3_scalar_multiply(v_roll, t)), initial_position));
-    Vector3 required_acceleration = Vector3_add(Vector3_subtract(initial_position, roll_position), Vector3_scalar_multiply(v_roll, t));
-    required_acceleration = Vector3_scalar_multiply(Vector3_normalize(required_acceleration), mu_slide * g);
-    printf("Acceleration must be ");
-    Vector3_print(Vector3_normalize(required_acceleration));
+    Vector3 required_acceleration = Vector3Add(Vector3Subtract(initial_position, roll_position), Vector3Scale(v_roll, t));
+    required_acceleration = Vector3Scale(Vector3Normalize(required_acceleration), mu_slide * g);
 
-    printf("Initial velocity must be ");
-    Vector3 required_velocity = Vector3_subtract(v_roll, Vector3_scalar_multiply(required_acceleration, t));
-    Vector3_print(required_velocity);
+    Vector3 required_velocity = Vector3Subtract(v_roll, Vector3Scale(required_acceleration, t));
     *v = required_velocity;
 
-    Vector3 required_angular_acceleration = Vector3_cross(required_acceleration, (Vector3){0, 0, -1});
-    printf("Required angular  acceleration : ");
-    Vector3_print(required_angular_acceleration);
-    required_angular_acceleration = Vector3_scalar_multiply(required_angular_acceleration, -2.5 / R);
-    printf("Angular velocity when ball starts rolling is ");
-    Vector3_print(w_roll);
-    Vector3 required_angular_velocity = Vector3_subtract(w_roll, Vector3_scalar_multiply(required_angular_acceleration, t));
+    Vector3 required_angular_acceleration = Vector3CrossProduct(required_acceleration, (Vector3){0, 0, -1});
+    required_angular_acceleration = Vector3Scale(required_angular_acceleration, -2.5 / R);
+    Vector3 required_angular_velocity = Vector3Subtract(w_roll, Vector3Scale(required_angular_acceleration, t));
 
     *w = required_angular_velocity;
 }
@@ -878,20 +860,20 @@ void solve_one_cushion_shot(Scene *scene, Vector3 initial_position, Vector3 targ
     double g = scene->coefficients.g;
     double R = scene->ball_set.balls[0].radius;
 
-    Vector3 cushion_tangent = Vector3_normalize(Vector3_subtract(cushion.p2, cushion.p1));
+    Vector3 cushion_tangent = Vector3Normalize(Vector3Subtract(cushion.p2, cushion.p1));
     double cushion_coord = 0;
-    double cushion_length = Vector3_mag(Vector3_subtract(cushion.p2, cushion.p1));
+    double cushion_length = Vector3Length(Vector3Subtract(cushion.p2, cushion.p1));
     Vector3 cushion_contact_point;
     while (cushion_coord < cushion_length)
     {
-        cushion_contact_point = Vector3_add(cushion.p1, Vector3_scalar_multiply(cushion_tangent, cushion_coord));
+        cushion_contact_point = Vector3Add(cushion.p1, Vector3Scale(cushion_tangent, cushion_coord));
         Vector3 v_after_collision;
         Vector3 w_after_collision;
         solve_direct_shot(scene, cushion_contact_point, target_position, v_roll, &v_after_collision, &w_after_collision);
-        Vector3 v_normal = Vector3_subtract(v_after_collision, Vector3_scalar_multiply(cushion_tangent, Vector3_dot(v_after_collision, cushion_tangent)));
-        Vector3 v_before_collision = Vector3_subtract(v_after_collision, Vector3_scalar_multiply(v_normal, 2));
-        Vector3 v_contact_point = Vector3_subtract(v_before_collision, Vector3_cross(w_after_collision, (Vector3){0, 0, R}));
-        Vector3 acceleration = Vector3_scalar_multiply(Vector3_normalize(v_contact_point), -mu_slide * g);
+        Vector3 v_normal = Vector3Subtract(v_after_collision, Vector3Scale(cushion_tangent, Vector3DotProduct(v_after_collision, cushion_tangent)));
+        Vector3 v_before_collision = Vector3Subtract(v_after_collision, Vector3Scale(v_normal, 2));
+        Vector3 v_contact_point = Vector3Subtract(v_before_collision, Vector3CrossProduct(w_after_collision, (Vector3){0, 0, R}));
+        Vector3 acceleration = Vector3Scale(Vector3Normalize(v_contact_point), -mu_slide * g);
         double x1, x2, x3, x4;
         solve_quadratic(0.5 * acceleration.x, -v_contact_point.x, cushion_contact_point.x - initial_position.x, &x1, &x2);
         solve_quadratic(0.5 * acceleration.y, -v_contact_point.y, cushion_contact_point.y - initial_position.y, &x3, &x4);
@@ -967,10 +949,10 @@ BallSet standard_ball_set()
     ball_set.balls[3].colour = RED;
     ball_set.balls[4].colour = PURPLE;
     ball_set.balls[5].colour = ORANGE;
-    ball_set.balls[6].colour = GREEN;
+    ball_set.balls[6].colour = DARKGREEN;
     ball_set.balls[7].colour = MAROON;
     ball_set.balls[8].colour = BLACK;
-    ball_set.balls[9].colour = YELLOW;
+    ball_set.balls[9].colour = GOLD;
 
     return ball_set;
 }
@@ -1065,20 +1047,47 @@ Scene new_scene()
     return scene;
 }
 
-void render_UI(Vector3 v, Vector3 w)
+void render_UI(Game *game, Vector3 v, Vector3 w)
 {
     DrawRectangle(0, 700, 100, 100, BLACK);
     DrawRectangle(0, 800, 100, 100, BLACK);
     DrawRectangle(1540, 0, 100, 900, BLACK);
     DrawRectangle(1440, 0, 100, 900, BLACK);
 
-    DrawRectangle(1550, 890 - (int)Vector3_mag(w), 80, (int)Vector3_mag(w), PINK);
-    DrawRectangle(1450, 890 - (int)Vector3_mag(v), 80, (int)Vector3_mag(v), PINK);
+    DrawRectangle(1550, 890 - (int)Vector3Length(w), 80, (int)Vector3Length(w), PINK);
+    DrawRectangle(1450, 890 - (int)Vector3Length(v), 80, (int)Vector3Length(v), PINK);
 
-    Vector3 v_normalized = Vector3_normalize(v);
-    Vector3 w_normalized = Vector3_normalize(w);
+    Vector3 v_normalized = Vector3Normalize(v);
+    Vector3 w_normalized = Vector3Normalize(w);
     DrawLine(50, 750, 50 + 50 * v_normalized.x, 750 + 50 * v_normalized.y, WHITE);
     DrawLine(50, 850, 50 + 50 * w_normalized.x, 850 + 50 * w_normalized.y, WHITE);
+
+    DrawFPS(1350, 10);
+
+    if (game->state == BEFORE_SHOT)
+    {
+        DrawText("Before shot", 10, 10, 20, WHITE);
+        DrawText("Press Enter to take shot", 10, 40, 20, WHITE);
+    }
+    else if (game->state == DURING_SHOT)
+    {
+        DrawText("During shot", 10, 10, 20, WHITE);
+        DrawText("Press Up/Down to change playback speed", 10, 40, 20, WHITE);
+    }
+    else if (game->state == AFTER_SHOT)
+    {
+        DrawText("After shot", 10, 10, 20, WHITE);
+        DrawText("Press Enter to end shot", 10, 40, 20, WHITE);
+    }
+
+    if (game->players[game->current_player].type == HUMAN)
+    {
+        DrawText("Human player", 10, 70, 20, WHITE);
+    }
+    else
+    {
+        DrawText("AI player", 10, 70, 20, WHITE);
+    }
 }
 
 void generate_shot(Game *game, Vector3 velocity, Vector3 angular_velocity)
@@ -1157,7 +1166,7 @@ void render_game(Game *game)
 {
     ClearBackground(GREEN);
     render_scene(game->scene, game->time);
-    render_UI(game->v, game->w);
+    render_UI(game, game->v, game->w);
 }
 
 bool legal_shot(Game *game)
@@ -1250,26 +1259,26 @@ bool update_game(Game *game)
             my = mouse_position.y;
             if (mx > 1450 && mx < 1530 && my > 10 && my < 890)
             {
-                game->v = Vector3_scalar_multiply(Vector3_normalize(game->v), 890 - my);
+                game->v = Vector3Scale(Vector3Normalize(game->v), 890 - my);
             }
             if (mx > 1550 && mx < 1630 && my > 10 && my < 890)
             {
-                game->w = Vector3_scalar_multiply(Vector3_normalize(game->w), 890 - my);
+                game->w = Vector3Scale(Vector3Normalize(game->w), 890 - my);
             }
             if (mx > 0 && mx < 100 && my > 700 && my < 800)
             {
-                double v_mag = Vector3_mag(game->v);
-                game->v = Vector3_normalize((Vector3){mx - 50, my - 750, 0});
-                game->v = Vector3_scalar_multiply(game->v, v_mag);
+                double v_mag = Vector3Length(game->v);
+                game->v = Vector3Normalize((Vector3){mx - 50, my - 750, 0});
+                game->v = Vector3Scale(game->v, v_mag);
             }
             if (mx > 0 && mx < 100 && my > 800 && my < 900)
             {
-                double w_mag = Vector3_mag(game->w);
-                game->w = Vector3_normalize((Vector3){mx - 50, my - 850, 0});
-                game->w = Vector3_scalar_multiply(game->w, w_mag);
+                double w_mag = Vector3Length(game->w);
+                game->w = Vector3Normalize((Vector3){mx - 50, my - 850, 0});
+                game->w = Vector3Scale(game->w, w_mag);
             }
             // solve_direct_shot(&scene, scene.ball_set.balls[0].initial_position, target_position, v_roll, &required_velocity, &required_angular_velocity);
-            game->v = Vector3_subtract((Vector3){mx, my, 0}, game->scene.ball_set.balls[0].initial_position);
+            game->v = Vector3Subtract((Vector3){mx, my, 0}, game->scene.ball_set.balls[0].initial_position);
             clear_paths(&(game->scene));
             generate_shot(game, game->v, game->w);
             game->time = 0;
@@ -1321,10 +1330,10 @@ bool update_game(Game *game)
 
 int main(int argc, char *argv[])
 {
-    const int SCREEN_WIDTH = 1600;
+    const int SCREEN_WIDTH = 1640;
     const int SCREEN_HEIGHT = 900;
 
-    InitWindow(SCREEN_HEIGHT, SCREEN_WIDTH, "Pool");
+    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Pool");
 
     SetTargetFPS(60);
     Game *game = new_game();
