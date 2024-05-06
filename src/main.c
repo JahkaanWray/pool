@@ -525,8 +525,8 @@ void resolve_ball_pocket_collision(Ball *ball, Pocket pocket, double time, Coeff
 {
     PathSegment *segment = &(ball->path.segments[ball->path.num_segments - 1]);
     Vector3 p = Vector3_add((Vector3){1000, 200, 0}, Vector3_scalar_multiply((Vector3){0, 50, 0}, ball->id));
-    Vector3 v = get_velocity(*segment, time);
-    Vector3 w = get_angular_velocity(*segment, time);
+    Vector3 v = {0, 0, 0};
+    Vector3 w = {0, 0, 0};
     add_sliding_segment(ball, p, v, w, time, coefficients);
 }
 
@@ -1014,6 +1014,7 @@ void take_shot(Game *game)
     Shot shot;
     shot.ball_paths = malloc(game->scene.ball_set.num_balls * sizeof(Path));
     shot.events = malloc(10 * sizeof(ShotEvent));
+    shot.num_events = 0;
     shot.event_capacity = 10;
     game->current_shot = shot;
 }
@@ -1120,15 +1121,6 @@ bool handle_events(SDL_Event *event, Game *game)
                 else if (game->state == AFTER_SHOT)
                 {
                     game->state = BEFORE_SHOT;
-                    for (int i = 0; i < game->scene.ball_set.num_balls; i++)
-                    {
-                        Ball *ball = &(game->scene.ball_set.balls[i]);
-                        ball->initial_position = get_ball_position(*ball, game->time);
-                        ball->path.num_segments = 0;
-                    }
-                    clear_paths(&(game->scene));
-                    game->time = 0;
-                    game->playback_speed = 0;
                 }
             }
         }
@@ -1181,6 +1173,22 @@ bool handle_events(SDL_Event *event, Game *game)
     return false;
 }
 
+bool legal_shot(Game *game)
+{
+    Shot last_shot = game->shot_history[game->num_shots - 1];
+    bool legal = false;
+    for (int i = 0; i < last_shot.num_events; i++)
+    {
+        ShotEvent event = last_shot.events[i];
+        if (event.type == BALL_POCKETED)
+        {
+            printf("Ball pocketed\n");
+            legal = true;
+        }
+    }
+    return legal;
+}
+
 int main(int argc, char *argv[])
 {
     SDL_Init(SDL_INIT_VIDEO);
@@ -1195,9 +1203,45 @@ int main(int argc, char *argv[])
     {
         quit = handle_events(&event, game);
 
-        if (game->state == DURING_SHOT)
+        if (game->state == BEFORE_SHOT)
+        {
+            if (game->players[game->current_player].type == AI)
+            {
+                solve_direct_shot(&(game->scene), game->scene.ball_set.balls[0].initial_position, (Vector3){600, 200, 0}, (Vector3){0, 50, 0}, &(game->v), &(game->w));
+                clear_paths(&(game->scene));
+                generate_shot(game, game->v, game->w);
+                take_shot(game);
+                game->time = 0;
+                game->playback_speed = 1;
+                game->state = DURING_SHOT;
+            }
+        }
+        else if (game->state == DURING_SHOT)
         {
             game->time += game->playback_speed / 60;
+        }
+        else if (game->state == AFTER_SHOT)
+        {
+            if (!legal_shot(game))
+            {
+                printf("Foul\n");
+                game->current_player = (game->current_player + 1) % game->num_players;
+            }
+            else
+            {
+                printf("Legal shot\n");
+            }
+
+            game->state = BEFORE_SHOT;
+            for (int i = 0; i < game->scene.ball_set.num_balls; i++)
+            {
+                Ball *ball = &(game->scene.ball_set.balls[i]);
+                ball->initial_position = get_ball_position(*ball, game->time);
+                ball->path.num_segments = 0;
+            }
+            clear_paths(&(game->scene));
+            game->time = 0;
+            game->playback_speed = 0;
         }
 
         render_game(renderer, game);
