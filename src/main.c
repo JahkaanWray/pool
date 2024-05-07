@@ -132,17 +132,37 @@ typedef enum
     AFTER_SHOT
 } GameState;
 
+typedef struct
+{
+    Shot *shot_history;
+    int num_shots;
+    int shot_capacity;
+
+    Player *winner;
+} Frame;
+
+typedef enum
+{
+    MAIN_MENU,
+    GAMEPLAY,
+    GAME_OVER
+} GameScreen;
+
 typedef struct Game
 {
+    GameScreen screen;
+
     Scene scene;
     Player *players;
     int num_players;
     int current_player;
 
     Shot current_shot;
-    Shot *shot_history;
-    int num_shots;
-    int shot_capacity;
+
+    Frame current_frame;
+    Frame *frames;
+    int num_frames;
+    int frame_capacity;
 
     GameState state;
 
@@ -726,6 +746,10 @@ void render_path(Path path)
 
 void pot_ball(Game *game, Ball *ball)
 {
+    if (ball == NULL)
+    {
+        return;
+    }
     Vector3 p2 = ball->initial_position;
     Vector3 p3 = game->scene.ball_set.balls[0].initial_position;
     Vector3 aim_point;
@@ -792,7 +816,8 @@ void pot_ball(Game *game, Ball *ball)
     }
     if (!shot_found)
     {
-        game->v = (Vector3){0, 0, 0};
+        game->v = (Vector3){100, 0, 0};
+        game->v = Vector3Scale(Vector3Normalize(Vector3Subtract(aim_point, p3)), 500);
         game->w = (Vector3){0, 0, 0};
 
         return;
@@ -1103,13 +1128,13 @@ void generate_shot(Game *game, Vector3 velocity, Vector3 angular_velocity)
 
 void take_shot(Game *game)
 {
-    if (game->num_shots == game->shot_capacity)
+    if (game->current_frame.num_shots == game->current_frame.shot_capacity)
     {
-        game->shot_capacity *= 2;
-        game->shot_history = realloc(game->shot_history, game->shot_capacity * sizeof(Shot));
+        game->current_frame.shot_capacity *= 2;
+        game->current_frame.shot_history = realloc(game->current_frame.shot_history, game->current_frame.shot_capacity * sizeof(Shot));
     }
-    game->shot_history[game->num_shots] = game->current_shot;
-    game->num_shots++;
+    game->current_frame.shot_history[game->current_frame.num_shots] = game->current_shot;
+    game->current_frame.num_shots++;
     Shot shot;
     shot.ball_paths = malloc(game->scene.ball_set.num_balls * sizeof(Path));
     shot.events = malloc(10 * sizeof(ShotEvent));
@@ -1129,6 +1154,7 @@ void clear_paths(Scene *scene)
 Game *new_game()
 {
     Game *game = malloc(sizeof(Game));
+    game->screen = MAIN_MENU;
     game->scene = new_scene();
     game->num_players = 2;
     game->players = malloc(game->num_players * sizeof(Player));
@@ -1136,7 +1162,7 @@ Game *new_game()
     {
         game->players[i].game = game;
     }
-    game->players[0].type = HUMAN;
+    game->players[0].type = AI;
     game->players[1].type = AI;
     game->current_player = 0;
     game->v = (Vector3){1, 0, 0};
@@ -1144,14 +1170,19 @@ Game *new_game()
     game->time = 0;
     game->playback_speed = 0;
     game->state = BEFORE_SHOT;
-    game->num_shots = 0;
-    game->shot_capacity = 10;
-    game->shot_history = malloc(game->shot_capacity * sizeof(Shot));
+    game->current_frame.num_shots = 0;
+    game->current_frame.shot_capacity = 10;
+    game->current_frame.shot_history = malloc(game->current_frame.shot_capacity * sizeof(Shot));
+    game->current_frame.winner = NULL;
     Shot shot;
     shot.ball_paths = malloc(game->scene.ball_set.num_balls * sizeof(Path));
     shot.events = malloc(10 * sizeof(ShotEvent));
+    shot.num_events = 0;
     shot.event_capacity = 10;
     game->current_shot = shot;
+    game->num_frames = 0;
+    game->frame_capacity = 10;
+    game->frames = malloc(game->frame_capacity * sizeof(Frame));
     return game;
 }
 
@@ -1162,11 +1193,24 @@ void free_game(Game *game)
     free(game);
 }
 
+void render_menu()
+{
+    ClearBackground(RAYWHITE);
+    DrawText("Press Enter to start game", 10, 10, 20, BLACK);
+}
+
 void render_game(Game *game)
 {
-    ClearBackground(GREEN);
-    render_scene(game->scene, game->time);
-    render_UI(game, game->v, game->w);
+    if (game->screen == MAIN_MENU)
+    {
+        render_menu();
+    }
+    else if (game->screen == GAMEPLAY)
+    {
+        ClearBackground(GREEN);
+        render_scene(game->scene, game->time);
+        render_UI(game, game->v, game->w);
+    }
 }
 
 bool legal_shot(Game *game)
@@ -1182,7 +1226,7 @@ bool legal_shot(Game *game)
             break;
         }
     }
-    Shot last_shot = game->shot_history[game->num_shots - 1];
+    Shot last_shot = game->current_frame.shot_history[game->current_frame.num_shots - 1];
     bool ball_potted = false;
     bool legal_first_hit = false;
     for (int i = 0; i < last_shot.num_events; i++)
@@ -1210,8 +1254,17 @@ bool legal_shot(Game *game)
     }
     return legal_first_hit && ball_potted;
 }
+
 bool update_game(Game *game)
 {
+    if (game->screen == MAIN_MENU)
+    {
+        if (IsKeyPressed(KEY_ENTER))
+        {
+            game->screen = GAMEPLAY;
+        }
+        return true;
+    }
     if (IsKeyPressed(KEY_UP))
     {
         if (game->state == DURING_SHOT)
@@ -1237,7 +1290,7 @@ bool update_game(Game *game)
                 game->time = 0;
                 game->playback_speed = 1;
 
-                printf("Number of shots taken : %d\n", game->num_shots);
+                printf("Number of shots taken : %d\n", game->current_frame.num_shots);
             }
         }
         else if (game->state == DURING_SHOT)
@@ -1288,7 +1341,7 @@ bool update_game(Game *game)
         {
             // solve_direct_shot(&(game->scene), game->scene.ball_set.balls[0].initial_position, (Vector3){600, 200, 0}, (Vector3){0, 5, 0}, &(game->v), &(game->w));
 
-            Ball *target_ball;
+            Ball *target_ball = NULL;
             for (int i = 1; i < game->scene.ball_set.num_balls; i++)
             {
                 Ball *ball = &(game->scene.ball_set.balls[i]);
