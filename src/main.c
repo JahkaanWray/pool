@@ -92,10 +92,12 @@ typedef enum
 
 struct Game;
 
+typedef void (*PlayerPotBallFunction)(struct Game *game, Ball *ball);
 typedef struct
 {
     PlayerType type;
     struct Game *game;
+    PlayerPotBallFunction pot_ball;
 } Player;
 
 typedef enum
@@ -736,7 +738,7 @@ void render_path(Path path)
     }
 }
 
-void pot_ball(Game *game, Ball *ball)
+void pot_ball(Game *game, Ball *ball, int power)
 {
     if (ball == NULL)
     {
@@ -792,7 +794,7 @@ void pot_ball(Game *game, Ball *ball)
         bool cuttable = false;
         double dot_product = Vector3DotProduct(Vector3Normalize(Vector3Subtract(p1, p2)), Vector3Normalize(Vector3Subtract(aim_point, p3)));
 
-        if (dot_product > 0)
+        if (dot_product > 0.2)
         {
             cuttable = true;
         }
@@ -806,12 +808,12 @@ void pot_ball(Game *game, Ball *ball)
     if (!shot_found)
     {
         game->v = (Vector3){100, 0, 0};
-        game->v = Vector3Scale(Vector3Normalize(Vector3Subtract(aim_point, p3)), 500);
+        game->v = Vector3Scale(Vector3Normalize(Vector3Subtract(aim_point, p3)), power);
         game->w = (Vector3){0, 0, 0};
 
         return;
     }
-    game->v = Vector3Scale(Vector3Normalize(Vector3Subtract(aim_point, p3)), 700);
+    game->v = Vector3Scale(Vector3Normalize(Vector3Subtract(aim_point, p3)), power);
     game->w = (Vector3){0, 0, 0};
 }
 
@@ -1205,6 +1207,16 @@ void clear_paths(Scene *scene)
     }
 }
 
+void player1_pot_ball(Game *game, Ball *ball)
+{
+    pot_ball(game, ball, 400);
+}
+
+void player2_pot_ball(Game *game, Ball *ball)
+{
+    pot_ball(game, ball, 800);
+}
+
 Game *new_game()
 {
     Game *game = malloc(sizeof(Game));
@@ -1218,6 +1230,8 @@ Game *new_game()
     }
     game->players[0].type = AI;
     game->players[1].type = AI;
+    game->players[0].pot_ball = player1_pot_ball;
+    game->players[1].pot_ball = player2_pot_ball;
     game->current_player = 0;
     game->v = (Vector3){1, 0, 0};
     game->w = (Vector3){0, 1, 0};
@@ -1279,7 +1293,7 @@ void setup_new_frame(Game *game)
         Ball *ball = &(game->scene.ball_set.balls[i]);
         ball->pocketed = false;
         ball->path.num_segments = 0;
-        ball->initial_position = (Vector3){500, 200 + 50 * i, 0};
+        ball->initial_position = (Vector3){GetRandomValue(100, 800), GetRandomValue(100, 800), 0};
     }
 }
 
@@ -1399,7 +1413,7 @@ bool update_game(Game *game)
                 take_shot(game);
                 game->state = DURING_SHOT;
                 game->time = 0;
-                game->playback_speed = 10;
+                game->playback_speed = 20;
             }
         }
         else if (game->state == DURING_SHOT)
@@ -1459,12 +1473,13 @@ bool update_game(Game *game)
                     break;
                 }
             }
-            pot_ball(game, target_ball);
+            PlayerPotBallFunction pot_ball_function = game->players[game->current_player].pot_ball;
+            pot_ball_function(game, target_ball);
             clear_paths(&(game->scene));
             generate_shot(game, game->v, game->w);
             take_shot(game);
             game->time = 0;
-            game->playback_speed = 10;
+            game->playback_speed = 20;
             game->state = DURING_SHOT;
         }
     }
