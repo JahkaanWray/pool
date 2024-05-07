@@ -123,6 +123,7 @@ typedef struct
     ShotEvent *events;
     int num_events;
     int event_capacity;
+    double end_time;
 } Shot;
 
 typedef enum
@@ -236,16 +237,7 @@ void print_path(Path path)
     for (int i = 0; i < path.num_segments; i++)
     {
         PathSegment segment = path.segments[i];
-        printf("Segment %d\n", i);
-        printf("Initial position = (%f, %f, %f)\n", segment.initial_position.x, segment.initial_position.y, segment.initial_position.z);
-        printf("Initial velocity = (%f, %f, %f)\n", segment.initial_velocity.x, segment.initial_velocity.y, segment.initial_velocity.z);
-        printf("Initial angular velocity = (%f, %f, %f)\n", segment.initial_angular_velocity.x, segment.initial_angular_velocity.y, segment.initial_angular_velocity.z);
-        printf("Start time = %f\n", segment.start_time);
-        printf("End time = %f\n", segment.end_time);
-        printf("Rolling = %d\n", segment.rolling);
         Vector3 acceleration = segment.acceleration;
-        printf("Acceleration = (%f, %f, %f)\n", acceleration.x, acceleration.y, acceleration.z);
-        printf("\n\n\n\n");
     }
 }
 
@@ -756,7 +748,6 @@ void pot_ball(Game *game, Ball *ball)
     bool shot_found = false;
     for (int i = 0; i < game->scene.table.num_pockets; i++)
     {
-        printf("Trying pocket %d\n", i);
         Vector3 p1 = game->scene.table.pockets[i].position;
         Vector3 normal = Vector3Normalize(Vector3Subtract(p2, p1));
         aim_point = Vector3Add(p2, Vector3Scale(normal, 2 * ball->radius));
@@ -776,7 +767,6 @@ void pot_ball(Game *game, Ball *ball)
             if (fabs(distance) < 2 * ball->radius && Vector3DotProduct(Vector3Subtract(p4, p1), aim_line) > 0)
             {
                 object_ball_blocked = true;
-                printf("Object ball blocked by ball %d\n", current_ball->id);
                 break;
             }
         }
@@ -795,7 +785,6 @@ void pot_ball(Game *game, Ball *ball)
             distance = Vector3DotProduct(Vector3Subtract(p4, p1), aim_line_normal);
             if (fabs(distance) < 2 * ball->radius)
             {
-                printf("Cue ball blocked by ball %d\n", current_ball->id);
                 cue_ball_blocked = true;
                 break;
             }
@@ -822,8 +811,7 @@ void pot_ball(Game *game, Ball *ball)
 
         return;
     }
-    printf("Shot found\n");
-    game->v = Vector3Scale(Vector3Normalize(Vector3Subtract(aim_point, p3)), 500);
+    game->v = Vector3Scale(Vector3Normalize(Vector3Subtract(aim_point, p3)), 700);
     game->w = (Vector3){0, 0, 0};
 }
 
@@ -845,7 +833,6 @@ void solve_direct_shot(Scene *scene, Vector3 initial_position, Vector3 target_po
 
     double x1, x2, x3, x4;
     solve_quartic(a, b, c, d, e, &x1, &x2, &x3, &x4);
-    printf("%f %f %f %f\n", x1, x2, x3, x4);
     // Find smallest root greater than zero
     double t = INFINITY;
     if (x1 > 0 && x1 < t)
@@ -864,7 +851,6 @@ void solve_direct_shot(Scene *scene, Vector3 initial_position, Vector3 target_po
     {
         t = x4;
     }
-    printf("%f\n", t);
     Vector3 required_acceleration = Vector3Add(Vector3Subtract(initial_position, roll_position), Vector3Scale(v_roll, t));
     required_acceleration = Vector3Scale(Vector3Normalize(required_acceleration), mu_slide * g);
 
@@ -1058,13 +1044,13 @@ Scene new_scene()
     scene.table = new_table();
     scene.ball_set = standard_ball_set();
     Coefficients coefficients;
-    coefficients.mu_slide = 5.5;
-    coefficients.mu_roll = 0.6;
+    coefficients.mu_slide = 15.5;
+    coefficients.mu_roll = 2.6;
     coefficients.mu_ball_cushion = 0.5;
     coefficients.mu_ball_ball = 0.5;
     coefficients.g = 9.8;
-    coefficients.e_ball_ball = 0.8;
-    coefficients.e_ball_cushion = 0.9;
+    coefficients.e_ball_ball = 1;
+    coefficients.e_ball_cushion = 1;
     coefficients.e_ball_table = 0.9;
 
     scene.coefficients = coefficients;
@@ -1113,6 +1099,64 @@ void render_UI(Game *game, Vector3 v, Vector3 w)
     {
         DrawText("AI player", 10, 70, 20, WHITE);
     }
+    char player_text[100];
+    sprintf(player_text, "Player %d", game->current_player + 1);
+    DrawText(player_text, 10, 100, 20, WHITE);
+
+    char playback_speed_text[100];
+    sprintf(playback_speed_text, "Playback speed: %f", game->playback_speed);
+    DrawText(playback_speed_text, 10, 130, 20, WHITE);
+
+    char time_text[100];
+    sprintf(time_text, "Time: %f", game->time);
+    DrawText(time_text, 10, 160, 20, WHITE);
+
+    char frame_text[100];
+    sprintf(frame_text, "Frame: %d", game->num_frames);
+    DrawText(frame_text, 10, 190, 20, WHITE);
+
+    for (int i = 0; i < game->current_frame.num_shots; i++)
+    {
+        for (int j = 0; j < game->current_frame.shot_history[i].num_events; j++)
+        {
+            ShotEvent event = game->current_frame.shot_history[i].events[j];
+            if (event.type == BALL_POCKETED)
+            {
+                Ball *ball = event.ball1;
+                DrawCircle(900, 20 + 30 * i, 10, ball->colour);
+                DrawText("Potted", 920, 10 + 30 * i, 20, WHITE);
+                break;
+            }
+        }
+    }
+
+    int *scores = malloc(game->num_players * sizeof(int));
+    for (int i = 0; i < game->num_players; i++)
+    {
+        scores[i] = 0;
+    }
+    for (int i = 0; i < game->num_frames; i++)
+    {
+        if (game->frames[i].winner != NULL)
+        {
+            Player *winner = game->frames[i].winner;
+
+            for (int j = 0; j < game->num_players; j++)
+            {
+                if (&game->players[j] == winner)
+                {
+                    scores[j]++;
+                }
+            }
+        }
+    }
+    for (int i = 0; i < game->num_players; i++)
+    {
+        char score_text[100];
+        sprintf(score_text, "Player %d: %d", i + 1, scores[i]);
+        DrawText(score_text, 10, 220 + 30 * i, 20, WHITE);
+    }
+    free(scores);
 }
 
 void generate_shot(Game *game, Vector3 velocity, Vector3 angular_velocity)
@@ -1120,10 +1164,20 @@ void generate_shot(Game *game, Vector3 velocity, Vector3 angular_velocity)
     Ball *cue_ball = &(game->scene.ball_set.balls[0]);
     game->current_shot.num_events = 0;
     generate_paths(game, cue_ball, cue_ball->initial_position, velocity, angular_velocity, 0);
+    double end_time = 0;
     for (int i = 0; i < game->scene.ball_set.num_balls; i++)
     {
         game->current_shot.ball_paths[i] = game->scene.ball_set.balls[i].path;
+        Path path = game->scene.ball_set.balls[i].path;
+        PathSegment last_segment = path.segments[path.num_segments - 1];
+        if (last_segment.start_time > end_time)
+        {
+            end_time = last_segment.start_time;
+        }
     }
+    game->current_shot.end_time = end_time;
+    printf("Shot generated\n");
+    printf("End time: %f\n", end_time);
 }
 
 void take_shot(Game *game)
@@ -1213,10 +1267,27 @@ void render_game(Game *game)
     }
 }
 
-bool legal_shot(Game *game)
+void setup_new_frame(Game *game)
+{
+    game->current_frame.num_shots = 0;
+    game->current_frame.winner = NULL;
+    game->current_frame.shot_capacity = 10;
+    game->current_frame.shot_history = malloc(game->current_frame.shot_capacity * sizeof(Shot));
+
+    for (int i = 0; i < game->scene.ball_set.num_balls; i++)
+    {
+        Ball *ball = &(game->scene.ball_set.balls[i]);
+        ball->pocketed = false;
+        ball->path.num_segments = 0;
+        ball->initial_position = (Vector3){500, 200 + 50 * i, 0};
+    }
+}
+
+bool apply_game_rules(Game *game)
 {
     Ball *cue_ball = &(game->scene.ball_set.balls[0]);
-    Ball *target_ball;
+    Ball *target_ball = NULL;
+    Ball *nine_ball = &(game->scene.ball_set.balls[9]);
     for (int i = 1; i < game->scene.ball_set.num_balls; i++)
     {
         Ball *ball = &(game->scene.ball_set.balls[i]);
@@ -1226,9 +1297,16 @@ bool legal_shot(Game *game)
             break;
         }
     }
+    if (target_ball == NULL)
+    {
+        game->current_player = (game->current_player + 1) % game->num_players;
+        return false;
+    }
     Shot last_shot = game->current_frame.shot_history[game->current_frame.num_shots - 1];
     bool ball_potted = false;
     bool legal_first_hit = false;
+    bool nine_ball_potted = false;
+    bool cue_ball_potted = false;
     for (int i = 0; i < last_shot.num_events; i++)
     {
         ShotEvent event = last_shot.events[i];
@@ -1241,11 +1319,44 @@ bool legal_shot(Game *game)
     for (int i = 0; i < last_shot.num_events; i++)
     {
         ShotEvent event = last_shot.events[i];
-        if (event.type == BALL_POCKETED && event.ball1->id != cue_ball->id)
+        if (event.type == BALL_POCKETED)
         {
             event.ball1->pocketed = true;
             ball_potted = true;
+            if (event.ball1->id == 9)
+            {
+                nine_ball_potted = true;
+            }
+            if (event.ball1->id == 0)
+            {
+                cue_ball_potted = true;
+            }
+
+            printf("%d ball potted\n", event.ball1->id);
         }
+    }
+    cue_ball->pocketed = false;
+    printf("9 ball potted: %d\n", nine_ball_potted);
+    if (nine_ball_potted)
+    {
+        printf("9 ball potted\n");
+        if (!legal_first_hit || cue_ball_potted)
+        {
+            game->current_frame.winner = &(game->players[(game->current_player + 1) % game->num_players]);
+        }
+        else
+        {
+            game->current_frame.winner = &(game->players[game->current_player]);
+        }
+        if (game->num_frames == game->frame_capacity)
+        {
+            game->frame_capacity *= 2;
+            game->frames = realloc(game->frames, game->frame_capacity * sizeof(Frame));
+        }
+        game->frames[game->num_frames] = game->current_frame;
+        game->num_frames++;
+        setup_new_frame(game);
+        printf("Frame ended\n");
     }
     if (!legal_first_hit || !ball_potted)
     {
@@ -1288,14 +1399,11 @@ bool update_game(Game *game)
                 take_shot(game);
                 game->state = DURING_SHOT;
                 game->time = 0;
-                game->playback_speed = 1;
-
-                printf("Number of shots taken : %d\n", game->current_frame.num_shots);
+                game->playback_speed = 10;
             }
         }
         else if (game->state == DURING_SHOT)
         {
-            game->state = AFTER_SHOT;
         }
         else if (game->state == AFTER_SHOT)
         {
@@ -1356,17 +1464,21 @@ bool update_game(Game *game)
             generate_shot(game, game->v, game->w);
             take_shot(game);
             game->time = 0;
-            game->playback_speed = 1;
+            game->playback_speed = 10;
             game->state = DURING_SHOT;
         }
     }
     else if (game->state == DURING_SHOT)
     {
         game->time += game->playback_speed / 60;
+        if (game->time > game->current_frame.shot_history[game->current_frame.num_shots - 1].end_time)
+        {
+            game->state = AFTER_SHOT;
+        }
     }
     else if (game->state == AFTER_SHOT)
     {
-        legal_shot(game);
+        apply_game_rules(game);
 
         game->state = BEFORE_SHOT;
         for (int i = 0; i < game->scene.ball_set.num_balls; i++)
