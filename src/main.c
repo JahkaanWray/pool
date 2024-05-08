@@ -1,4 +1,5 @@
 #include <stdbool.h>
+#include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
@@ -171,6 +172,7 @@ typedef struct Game
 
     double time;
     double playback_speed;
+    double default_playback_speed;
 
     Vector3 v;
     Vector3 w;
@@ -305,7 +307,7 @@ void free_path(Path *path)
     path->capacity = 0;
 }
 
-bool detect_ball_cushion_collision(Ball ball, Cushion line_segment, double *t)
+bool detect_ball_cushion_collision(Game *game, Ball ball, Cushion line_segment, double *t)
 {
     double collision_time;
     PathSegment *segment = &(ball.path.segments[ball.path.num_segments - 1]);
@@ -334,12 +336,28 @@ bool detect_ball_cushion_collision(Ball ball, Cushion line_segment, double *t)
     }
     double collision_time1 = segment->start_time + (-vn + sqrt(discriminant)) / an;
     double collision_time2 = segment->start_time + (-vn - sqrt(discriminant)) / an;
-    double tolerance = 1e-3;
-    if (collision_time1 <= segment->start_time + tolerance || collision_time1 > segment->end_time)
+    bool repeat_collision = false;
+    ShotEvent *events = game->current_shot.events;
+    ShotEvent last_event = {NONE, NULL, NULL, NULL, NULL, 0};
+    if (game->current_shot.num_events > 0)
+    {
+        last_event = events[game->current_shot.num_events - 1];
+    }
+    double min_time = last_event.time;
+
+    if (last_event.type == BALL_CUSHION_COLLISION)
+    {
+        if (last_event.ball1->id == ball.id && last_event.cushion->p1.x == line_segment.p1.x && last_event.cushion->p1.y == line_segment.p1.y && last_event.cushion->p2.x == line_segment.p2.x && last_event.cushion->p2.y == line_segment.p2.y)
+        {
+            repeat_collision = true;
+        }
+    }
+    double tolerance = repeat_collision ? 1e-3 : 0;
+    if (collision_time1 <= segment->start_time + tolerance || collision_time1 > segment->end_time || collision_time1 < min_time)
     {
         collision_time1 = -1;
     }
-    if (collision_time2 <= segment->start_time + tolerance || collision_time2 > segment->end_time)
+    if (collision_time2 <= segment->start_time + tolerance || collision_time2 > segment->end_time || collision_time2 < min_time)
     {
         collision_time2 = -1;
     }
@@ -363,7 +381,7 @@ bool detect_ball_cushion_collision(Ball ball, Cushion line_segment, double *t)
     return true;
 }
 
-bool detect_ball_ball_collision(Ball ball1, Ball ball2, double *t)
+bool detect_ball_ball_collision(Game *game, Ball ball1, Ball ball2, double *t)
 {
     PathSegment *segment1 = &(ball1.path.segments[ball1.path.num_segments - 1]);
     PathSegment *segment2 = &(ball2.path.segments[ball2.path.num_segments - 1]);
@@ -404,20 +422,36 @@ bool detect_ball_ball_collision(Ball ball1, Ball ball2, double *t)
     solve_quartic(a, b, c, d, e, &x1, &x2, &x3, &x4);
 
     double collision_time = INFINITY;
-    double tolerance = 1e-3;
-    if (x1 > segment1->start_time + tolerance && x1 < segment1->end_time && x1 > segment2->start_time + tolerance && x1 < segment2->end_time && x1 < collision_time)
+    bool repeat_collision = false;
+    ShotEvent *events = game->current_shot.events;
+    ShotEvent last_event = {NONE, NULL, NULL, NULL, NULL, 0};
+    if (game->current_shot.num_events > 0)
+    {
+        last_event = events[game->current_shot.num_events - 1];
+    }
+    double min_time = last_event.time;
+
+    if (last_event.type == BALL_BALL_COLLISION)
+    {
+        if ((last_event.ball1->id == ball1.id && last_event.ball2->id == ball2.id) || (last_event.ball1->id == ball2.id && last_event.ball2->id == ball1.id))
+        {
+            repeat_collision = true;
+        }
+    }
+    double tolerance = repeat_collision ? 1e-3 : 0;
+    if (x1 > segment1->start_time + tolerance && x1 < segment1->end_time && x1 > segment2->start_time + tolerance && x1 < segment2->end_time && x1 < collision_time && x1 > min_time)
     {
         collision_time = x1;
     }
-    if (x2 > segment1->start_time + tolerance && x2 < segment1->end_time && x2 > segment2->start_time + tolerance && x2 < segment2->end_time && x2 < collision_time)
+    if (x2 > segment1->start_time + tolerance && x2 < segment1->end_time && x2 > segment2->start_time + tolerance && x2 < segment2->end_time && x2 < collision_time && x2 > min_time)
     {
         collision_time = x2;
     }
-    if (x3 > segment1->start_time + tolerance && x3 < segment1->end_time && x3 > segment2->start_time + tolerance && x3 < segment2->end_time && x3 < collision_time)
+    if (x3 > segment1->start_time + tolerance && x3 < segment1->end_time && x3 > segment2->start_time + tolerance && x3 < segment2->end_time && x3 < collision_time && x3 > min_time)
     {
         collision_time = x3;
     }
-    if (x4 > segment1->start_time + tolerance && x4 < segment1->end_time && x4 > segment2->start_time + tolerance && x4 < segment2->end_time && x4 < collision_time)
+    if (x4 > segment1->start_time + tolerance && x4 < segment1->end_time && x4 > segment2->start_time + tolerance && x4 < segment2->end_time && x4 < collision_time && x4 > min_time)
     {
         collision_time = x4;
     }
@@ -429,7 +463,7 @@ bool detect_ball_ball_collision(Ball ball1, Ball ball2, double *t)
     return true;
 }
 
-bool detect_ball_pocket_collision(Ball ball, Pocket pocket, double *t)
+bool detect_ball_pocket_collision(Game *game, Ball ball, Pocket pocket, double *t)
 {
     PathSegment *segment1 = &(ball.path.segments[ball.path.num_segments - 1]);
     Vector3 p1 = segment1->initial_position;
@@ -441,6 +475,62 @@ bool detect_ball_pocket_collision(Ball ball, Pocket pocket, double *t)
     double t1 = segment1->start_time;
     double r1 = ball.radius;
     double r2 = pocket.radius;
+
+    if (segment1->rolling)
+    {
+        Vector3 p3 = get_position(*segment1, segment1->end_time);
+        printf("Initial position: %f %f\n", p1.x, p1.y);
+        printf("Final position: %f %f\n", p3.x, p3.y);
+        printf("Pocket position: %f %f\n", p2.x, p2.y);
+        printf("Line vector: %f %f\n", p3.x - p1.x, p3.y - p1.y);
+        double a = (p3.x - p1.x) * (p3.x - p1.x) + (p3.y - p1.y) * (p3.y - p1.y);
+        double b = 2 * ((p3.x - p1.x) * (p1.x - p2.x) + (p3.y - p1.y) * (p1.y - p2.y));
+        double c = (p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y) - (r1 + r2) * (r1 + r2);
+        double x1, x2;
+        printf("a: %f\n", a);
+        printf("b: %f\n", b);
+        printf("c: %f\n", c);
+        printf("b^2 %f\n", b * b);
+        printf("4ac %f\n", 4 * a * c);
+        printf("discriminant: %f\n", b * b - 4 * a * c);
+        solve_quadratic(a, b, c, &x1, &x2);
+        double x = INFINITY;
+        printf("x1: %f, x2: %f\n", x1, x2);
+        if (x1 > 0 && x1 < 1 && x1 < x)
+        {
+            x = x1;
+        }
+        if (x2 > 0 && x2 < 1 && x2 < x)
+        {
+            x = x2;
+        }
+        if (x == INFINITY)
+        {
+            return false;
+        }
+        printf("x: %f\n", x);
+        double distance = x * Vector3Length(Vector3Subtract(p3, p1));
+        printf("Distance: %f\n", distance);
+        double v = Vector3Length(v1);
+        printf("Speed: %f\n", v);
+        a = -Vector3Length(a1);
+        printf("Acceleration: %f\n", a);
+        solve_quadratic(0.5 * a, v, -distance, &x1, &x2);
+        double collision_time = INFINITY;
+        printf("x1: %f, x2: %f\n", x1, x2);
+        if (x1 < collision_time && x1 > 0)
+        {
+            collision_time = x1;
+        }
+        if (x2 < collision_time && x2 > 0)
+        {
+            collision_time = x2;
+        }
+        *t = collision_time + segment1->start_time;
+        printf("Collision time: %f\n", *t);
+        printf("\n\n\n\n");
+        return true;
+    }
 
     double A1 = 0.5 * a1.x;
     double B1 = v1.x - a1.x * t1;
@@ -464,20 +554,37 @@ bool detect_ball_pocket_collision(Ball ball, Pocket pocket, double *t)
     solve_quartic(a, b, c, d, e, &x1, &x2, &x3, &x4);
 
     double collision_time = INFINITY;
-    double tolerance = 1e-3;
-    if (x1 > segment1->start_time + tolerance && x1 < segment1->end_time)
+    bool repeat_collision = false;
+    ShotEvent *events = game->current_shot.events;
+    ShotEvent last_event = {NONE, NULL, NULL, NULL, NULL, 0};
+    if (game->current_shot.num_events > 0)
+    {
+        last_event = events[game->current_shot.num_events - 1];
+    }
+
+    double min_time = last_event.time;
+
+    if (last_event.type == BALL_POCKETED)
+    {
+        if (last_event.ball1->id == ball.id)
+        {
+            repeat_collision = true;
+        }
+    }
+    double tolerance = repeat_collision ? 1e-3 : 0;
+    if (x1 > segment1->start_time + tolerance && x1 < segment1->end_time && x1 < collision_time && x1 > min_time)
     {
         collision_time = x1;
     }
-    if (x2 > segment1->start_time + tolerance && x2 < segment1->end_time)
+    if (x2 > segment1->start_time + tolerance && x2 < segment1->end_time && x2 < collision_time && x2 > min_time)
     {
         collision_time = x2;
     }
-    if (x3 > segment1->start_time + tolerance && x3 < segment1->end_time)
+    if (x3 > segment1->start_time + tolerance && x3 < segment1->end_time && x3 < collision_time && x3 > min_time)
     {
         collision_time = x3;
     }
-    if (x4 > segment1->start_time + tolerance && x4 < segment1->end_time)
+    if (x4 > segment1->start_time + tolerance && x4 < segment1->end_time && x4 < collision_time && x4 > min_time)
     {
         collision_time = x4;
     }
@@ -585,7 +692,7 @@ bool update_path(Game *game)
         for (int j = i + 1; j < game->scene.ball_set.num_balls; j++)
         {
             Ball *other_ball = &(game->scene.ball_set.balls[j]);
-            if (detect_ball_ball_collision(*current_ball, *other_ball, &time))
+            if (detect_ball_ball_collision(game, *current_ball, *other_ball, &time))
             {
                 if (time < first_time)
                 {
@@ -600,7 +707,7 @@ bool update_path(Game *game)
         for (int j = 0; j < game->scene.table.num_cushions; j++)
         {
             Cushion current_cushion = game->scene.table.cushions[j];
-            if (detect_ball_cushion_collision(*current_ball, current_cushion, &time))
+            if (detect_ball_cushion_collision(game, *current_ball, current_cushion, &time))
             {
                 if (time < first_time)
                 {
@@ -615,7 +722,7 @@ bool update_path(Game *game)
         for (int j = 0; j < game->scene.table.num_pockets; j++)
         {
             Pocket current_pocket = game->scene.table.pockets[j];
-            if (detect_ball_pocket_collision(*current_ball, current_pocket, &time))
+            if (detect_ball_pocket_collision(game, *current_ball, current_pocket, &time))
             {
                 if (time < first_time)
                 {
@@ -674,8 +781,9 @@ bool update_path(Game *game)
     {
         resolve_stop(ball1, first_time);
     }
-    ShotEvent event = {update_type, ball1, ball2, &cushion, NULL, first_time};
+    ShotEvent event = {update_type, ball1, ball2, &cushion, &pocket, first_time};
     shot_add_event(&(game->current_shot), event);
+    printf("Detected event at time %f\n", first_time);
     return true;
 }
 
@@ -949,7 +1057,7 @@ BallSet standard_ball_set()
         Ball ball;
         ball.id = i;
         ball.initial_position = (Vector3){500, 200 + 50 * i, 0};
-        ball.radius = 10;
+        ball.radius = 2;
         ball.mass = 1;
         ball.path = new_path();
         ball_set.balls[i] = ball;
@@ -1132,6 +1240,57 @@ void render_UI(Game *game, Vector3 v, Vector3 w)
         }
     }
 
+    if (game->current_frame.num_shots != 0)
+    {
+
+        for (int i = 0; i < game->current_frame.shot_history[game->current_frame.num_shots - 1].num_events; i++)
+        {
+            ShotEvent event = game->current_frame.shot_history[game->current_frame.num_shots - 1].events[i];
+            Color colour;
+            if (event.time < game->time)
+            {
+                colour = RED;
+            }
+            else
+            {
+                colour = WHITE;
+            }
+            if (event.type == BALL_POCKETED)
+            {
+                Ball *ball = event.ball1;
+                DrawCircle(1100, 20 + 30 * i, 10, ball->colour);
+                DrawText("Potted", 1120, 10 + 30 * i, 20, colour);
+            }
+            if (event.type == BALL_BALL_COLLISION)
+            {
+                Ball *ball1 = event.ball1;
+                Ball *ball2 = event.ball2;
+                DrawCircle(1100, 20 + 30 * i, 10, ball1->colour);
+                DrawCircle(1120, 20 + 30 * i, 10, ball2->colour);
+                DrawText("Collision", 1140, 10 + 30 * i, 20, colour);
+            }
+            if (event.type == BALL_CUSHION_COLLISION)
+            {
+                Ball *ball = event.ball1;
+                DrawCircle(1100, 20 + 30 * i, 10, ball->colour);
+                DrawText("Cushion Collision", 1120, 10 + 30 * i, 20, colour);
+            }
+            if (event.type == BALL_ROLL)
+            {
+                Ball *ball = event.ball1;
+                DrawCircle(1100, 20 + 30 * i, 10, ball->colour);
+                DrawText("Roll", 1120, 10 + 30 * i, 20, colour);
+            }
+            if (event.type == BALL_STOP)
+            {
+                Ball *ball = event.ball1;
+                DrawCircle(1100, 20 + 30 * i, 10, ball->colour);
+                DrawText("Stop", 1120, 10 + 30 * i, 20, colour);
+            }
+            DrawText(TextFormat("%f", event.time), 1300, 10 + 30 * i, 20, colour);
+        }
+    }
+
     int *scores = malloc(game->num_players * sizeof(int));
     for (int i = 0; i < game->num_players; i++)
     {
@@ -1228,7 +1387,7 @@ Game *new_game()
     {
         game->players[i].game = game;
     }
-    game->players[0].type = AI;
+    game->players[0].type = HUMAN;
     game->players[1].type = AI;
     game->players[0].pot_ball = player1_pot_ball;
     game->players[1].pot_ball = player2_pot_ball;
@@ -1237,6 +1396,7 @@ Game *new_game()
     game->w = (Vector3){0, 1, 0};
     game->time = 0;
     game->playback_speed = 0;
+    game->default_playback_speed = 1;
     game->state = BEFORE_SHOT;
     game->current_frame.num_shots = 0;
     game->current_frame.shot_capacity = 10;
@@ -1395,6 +1555,7 @@ bool update_game(Game *game)
         if (game->state == DURING_SHOT)
         {
             game->playback_speed += 0.2;
+            game->default_playback_speed += 0.2;
         }
     }
     else if (IsKeyPressed(KEY_DOWN))
@@ -1402,6 +1563,7 @@ bool update_game(Game *game)
         if (game->state == DURING_SHOT)
         {
             game->playback_speed -= 0.2;
+            game->default_playback_speed -= 0.2;
         }
     }
     else if (IsKeyPressed(KEY_ENTER))
@@ -1413,7 +1575,7 @@ bool update_game(Game *game)
                 take_shot(game);
                 game->state = DURING_SHOT;
                 game->time = 0;
-                game->playback_speed = 20;
+                game->playback_speed = game->default_playback_speed;
             }
         }
         else if (game->state == DURING_SHOT)
@@ -1479,7 +1641,7 @@ bool update_game(Game *game)
             generate_shot(game, game->v, game->w);
             take_shot(game);
             game->time = 0;
-            game->playback_speed = 20;
+            game->playback_speed = game->default_playback_speed;
             game->state = DURING_SHOT;
         }
     }
