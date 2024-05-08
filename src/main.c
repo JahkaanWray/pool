@@ -307,15 +307,15 @@ void free_path(Path *path)
     path->capacity = 0;
 }
 
-bool detect_ball_cushion_collision(Game *game, Ball ball, Cushion line_segment, double *t)
+bool detect_ball_cushion_collision(Game *game, Ball ball, Cushion *cushion, double *t)
 {
-    double collision_time;
+    double collision_time = INFINITY;
     PathSegment *segment = &(ball.path.segments[ball.path.num_segments - 1]);
     Vector3 p1 = segment->initial_position;
     Vector3 v1 = segment->initial_velocity;
     Vector3 w1 = segment->initial_angular_velocity;
-    Vector3 line_normal = Vector3Normalize(Vector3CrossProduct(Vector3Subtract(line_segment.p2, line_segment.p1), (Vector3){0, 0, 1}));
-    double sn = Vector3DotProduct(Vector3Subtract(line_segment.p1, p1), line_normal);
+    Vector3 line_normal = Vector3Normalize(Vector3CrossProduct(Vector3Subtract(cushion->p2, cushion->p1), (Vector3){0, 0, 1}));
+    double sn = Vector3DotProduct(Vector3Subtract(cushion->p1, p1), line_normal);
     double vn = Vector3DotProduct(v1, line_normal);
     Vector3 a = segment->acceleration;
     double an = Vector3DotProduct(a, line_normal);
@@ -347,35 +347,23 @@ bool detect_ball_cushion_collision(Game *game, Ball ball, Cushion line_segment, 
 
     if (last_event.type == BALL_CUSHION_COLLISION)
     {
-        if (last_event.ball1->id == ball.id && last_event.cushion->p1.x == line_segment.p1.x && last_event.cushion->p1.y == line_segment.p1.y && last_event.cushion->p2.x == line_segment.p2.x && last_event.cushion->p2.y == line_segment.p2.y)
+        if (last_event.ball1->id == ball.id && last_event.cushion == cushion)
         {
             repeat_collision = true;
         }
     }
     double tolerance = repeat_collision ? 1e-3 : 0;
-    if (collision_time1 <= segment->start_time + tolerance || collision_time1 > segment->end_time || collision_time1 < min_time)
-    {
-        collision_time1 = -1;
-    }
-    if (collision_time2 <= segment->start_time + tolerance || collision_time2 > segment->end_time || collision_time2 < min_time)
-    {
-        collision_time2 = -1;
-    }
-    if (collision_time1 == -1 && collision_time2 == -1)
-    {
-        return false;
-    }
-    if (collision_time1 == -1)
-    {
-        collision_time = collision_time2;
-    }
-    else if (collision_time2 == -1)
+    if (collision_time1 > segment->start_time + tolerance && collision_time1 < segment->end_time && collision_time1 > min_time && collision_time1 < collision_time)
     {
         collision_time = collision_time1;
     }
-    else
+    if (collision_time2 > segment->start_time + tolerance && collision_time2 < segment->end_time && collision_time2 > min_time && collision_time2 < collision_time)
     {
-        collision_time = fmin(collision_time1, collision_time2);
+        collision_time = collision_time2;
+    }
+    if (collision_time == INFINITY)
+    {
+        return false;
     }
     *t = collision_time;
     return true;
@@ -626,13 +614,13 @@ void resolve_ball_ball_collision(Ball *ball1, Ball *ball2, double time, Coeffici
     add_sliding_segment(ball2, p2, v2_final, w2, time, coefficients);
 }
 
-void resolve_ball_cushion_collision(Ball *ball, Cushion cushion, double time, Coefficients coefficients)
+void resolve_ball_cushion_collision(Ball *ball, Cushion *cushion, double time, Coefficients coefficients)
 {
     PathSegment *segment = &(ball->path.segments[ball->path.num_segments - 1]);
     Vector3 p = get_position(*segment, time);
     Vector3 v = get_velocity(*segment, time);
     Vector3 w = get_angular_velocity(*segment, time);
-    Vector3 normal = Vector3Normalize(Vector3CrossProduct(Vector3Subtract(cushion.p2, cushion.p1), (Vector3){0, 0, 1}));
+    Vector3 normal = Vector3Normalize(Vector3CrossProduct(Vector3Subtract(cushion->p2, cushion->p1), (Vector3){0, 0, 1}));
     Vector3 tangent = Vector3CrossProduct(normal, (Vector3){0, 0, 1});
     double e = coefficients.e_ball_cushion;
     double v_n = Vector3DotProduct(v, normal);
@@ -682,7 +670,7 @@ bool update_path(Game *game)
     ShotEventType update_type = NONE;
     double first_time = INFINITY;
     double time = INFINITY;
-    Cushion cushion;
+    Cushion *cushion;
     Ball *ball1;
     Ball *ball2;
     Pocket pocket;
@@ -706,7 +694,7 @@ bool update_path(Game *game)
 
         for (int j = 0; j < game->scene.table.num_cushions; j++)
         {
-            Cushion current_cushion = game->scene.table.cushions[j];
+            Cushion *current_cushion = &(game->scene.table.cushions[j]);
             if (detect_ball_cushion_collision(game, *current_ball, current_cushion, &time))
             {
                 if (time < first_time)
@@ -781,7 +769,11 @@ bool update_path(Game *game)
     {
         resolve_stop(ball1, first_time);
     }
-    ShotEvent event = {update_type, ball1, ball2, &cushion, &pocket, first_time};
+    ShotEvent event = {update_type, ball1, ball2, cushion, &pocket, first_time};
+    if (game->current_shot.num_events > 0)
+    {
+        assert(first_time >= game->current_shot.events[game->current_shot.num_events - 1].time);
+    }
     shot_add_event(&(game->current_shot), event);
     printf("Detected event at time %f\n", first_time);
     return true;
@@ -1057,7 +1049,7 @@ BallSet standard_ball_set()
         Ball ball;
         ball.id = i;
         ball.initial_position = (Vector3){500, 200 + 50 * i, 0};
-        ball.radius = 2;
+        ball.radius = 10;
         ball.mass = 1;
         ball.path = new_path();
         ball_set.balls[i] = ball;
@@ -1453,7 +1445,7 @@ void setup_new_frame(Game *game)
         Ball *ball = &(game->scene.ball_set.balls[i]);
         ball->pocketed = false;
         ball->path.num_segments = 0;
-        ball->initial_position = (Vector3){GetRandomValue(100, 800), GetRandomValue(100, 800), 0};
+        ball->initial_position = (Vector3){GetRandomValue(200, 700), GetRandomValue(200, 700), 0};
     }
 }
 
