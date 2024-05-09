@@ -473,7 +473,7 @@ bool detect_ball_pocket_collision(Game *game, Ball ball, Pocket pocket, double *
         printf("Line vector: %f %f\n", p3.x - p1.x, p3.y - p1.y);
         double a = (p3.x - p1.x) * (p3.x - p1.x) + (p3.y - p1.y) * (p3.y - p1.y);
         double b = 2 * ((p3.x - p1.x) * (p1.x - p2.x) + (p3.y - p1.y) * (p1.y - p2.y));
-        double c = (p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y) - (r1 + r2) * (r1 + r2);
+        double c = (p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y) - (r2) * (r2);
         double x1, x2;
         printf("a: %f\n", a);
         printf("b: %f\n", b);
@@ -536,7 +536,7 @@ bool detect_ball_pocket_collision(Game *game, Ball ball, Pocket pocket, double *
     double b = 2 * ((A1) * (B1) + (A3) * (B3));
     double c = 2 * ((A1) * (C1 - C2) + (A3) * (C3 - C4)) + (B1) * (B1) + (B3) * (B3);
     double d = 2 * ((B1) * (C1 - C2) + (B3) * (C3 - C4));
-    double e = (C1 - C2) * (C1 - C2) + (C3 - C4) * (C3 - C4) - (r1 + r2) * (r1 + r2);
+    double e = (C1 - C2) * (C1 - C2) + (C3 - C4) * (C3 - C4) - (r2) * (r2);
 
     double x1, x2, x3, x4;
     solve_quartic(a, b, c, d, e, &x1, &x2, &x3, &x4);
@@ -1457,9 +1457,9 @@ Game *new_game()
     {
         game->players[i].game = game;
     }
-    game->players[0].type = AI;
+    game->players[0].type = HUMAN;
     game->players[1].type = AI;
-    game->players[0].pot_ball = pot_ball1;
+    game->players[0].pot_ball = pot_ball3;
     game->players[1].pot_ball = pot_ball3;
     game->current_player = 0;
     game->v = (Vector3){1, 0, 0};
@@ -1603,6 +1603,11 @@ bool apply_game_rules(Game *game)
         printf("Frame ended\n");
     }
     if (!legal_first_hit || !ball_potted)
+    {
+        game->current_player = (game->current_player + 1) % game->num_players;
+        return false;
+    }
+    if (legal_first_hit && cue_ball_potted)
     {
         game->current_player = (game->current_player + 1) % game->num_players;
         return false;
