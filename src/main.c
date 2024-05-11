@@ -122,6 +122,7 @@ typedef struct
 
 typedef struct
 {
+    Player *player;
     Path *ball_paths;
     ShotEvent *events;
     int num_events;
@@ -152,6 +153,13 @@ typedef enum
     GAME_OVER
 } GameScreen;
 
+typedef struct
+{
+    int num_shots;
+    int num_pots;
+    int num_fouls;
+} Stats;
+
 typedef struct Game
 {
     GameScreen screen;
@@ -176,6 +184,9 @@ typedef struct Game
 
     Vector3 v;
     Vector3 w;
+
+    Stats p1_stats;
+    Stats p2_stats;
 } Game;
 
 void shot_add_event(Shot *shot, ShotEvent event)
@@ -467,23 +478,12 @@ bool detect_ball_pocket_collision(Game *game, Ball ball, Pocket pocket, double *
     if (segment1->rolling)
     {
         Vector3 p3 = get_position(*segment1, segment1->end_time);
-        printf("Initial position: %f %f\n", p1.x, p1.y);
-        printf("Final position: %f %f\n", p3.x, p3.y);
-        printf("Pocket position: %f %f\n", p2.x, p2.y);
-        printf("Line vector: %f %f\n", p3.x - p1.x, p3.y - p1.y);
         double a = (p3.x - p1.x) * (p3.x - p1.x) + (p3.y - p1.y) * (p3.y - p1.y);
         double b = 2 * ((p3.x - p1.x) * (p1.x - p2.x) + (p3.y - p1.y) * (p1.y - p2.y));
         double c = (p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y) - (r2) * (r2);
         double x1, x2;
-        printf("a: %f\n", a);
-        printf("b: %f\n", b);
-        printf("c: %f\n", c);
-        printf("b^2 %f\n", b * b);
-        printf("4ac %f\n", 4 * a * c);
-        printf("discriminant: %f\n", b * b - 4 * a * c);
         solve_quadratic(a, b, c, &x1, &x2);
         double x = INFINITY;
-        printf("x1: %f, x2: %f\n", x1, x2);
         if (x1 > 0 && x1 < 1 && x1 < x)
         {
             x = x1;
@@ -496,16 +496,11 @@ bool detect_ball_pocket_collision(Game *game, Ball ball, Pocket pocket, double *
         {
             return false;
         }
-        printf("x: %f\n", x);
         double distance = x * Vector3Length(Vector3Subtract(p3, p1));
-        printf("Distance: %f\n", distance);
         double v = Vector3Length(v1);
-        printf("Speed: %f\n", v);
         a = -Vector3Length(a1);
-        printf("Acceleration: %f\n", a);
         solve_quadratic(0.5 * a, v, -distance, &x1, &x2);
         double collision_time = INFINITY;
-        printf("x1: %f, x2: %f\n", x1, x2);
         if (x1 < collision_time && x1 > 0)
         {
             collision_time = x1;
@@ -515,8 +510,6 @@ bool detect_ball_pocket_collision(Game *game, Ball ball, Pocket pocket, double *
             collision_time = x2;
         }
         *t = collision_time + segment1->start_time;
-        printf("Collision time: %f\n", *t);
-        printf("\n\n\n\n");
         return true;
     }
 
@@ -775,7 +768,6 @@ bool update_path(Game *game)
         assert(first_time >= game->current_shot.events[game->current_shot.num_events - 1].time);
     }
     shot_add_event(&(game->current_shot), event);
-    printf("Detected event at time %f\n", first_time);
     return true;
 }
 
@@ -990,7 +982,6 @@ void solve_one_cushion_shot(Scene *scene, Vector3 initial_position, Vector3 targ
         double x1, x2, x3, x4;
         solve_quadratic(0.5 * acceleration.x, -v_contact_point.x, cushion_contact_point.x - initial_position.x, &x1, &x2);
         solve_quadratic(0.5 * acceleration.y, -v_contact_point.y, cushion_contact_point.y - initial_position.y, &x3, &x4);
-        printf("%f %f %f %f\n", x1, x2, x3, x4);
         cushion_coord += 10;
     }
 }
@@ -1310,6 +1301,16 @@ void render_UI(Game *game, Vector3 v, Vector3 w)
         DrawText(score_text, 10, 220 + 30 * i, 20, WHITE);
     }
     free(scores);
+
+    DrawText("Stats", 10, 250, 20, WHITE);
+
+    char player1_stats[100];
+    sprintf(player1_stats, "Player 1: %d shots, %d pots, %d fouls", game->p1_stats.num_shots, game->p1_stats.num_pots, game->p1_stats.num_fouls);
+    DrawText(player1_stats, 10, 280, 20, WHITE);
+
+    char player2_stats[100];
+    sprintf(player2_stats, "Player 2: %d shots, %d pots, %d fouls", game->p2_stats.num_shots, game->p2_stats.num_pots, game->p2_stats.num_fouls);
+    DrawText(player2_stats, 10, 310, 20, WHITE);
 }
 
 void generate_shot(Game *game, Vector3 velocity, Vector3 angular_velocity)
@@ -1329,8 +1330,6 @@ void generate_shot(Game *game, Vector3 velocity, Vector3 angular_velocity)
         }
     }
     game->current_shot.end_time = end_time + 1;
-    printf("Shot generated\n");
-    printf("End time: %f\n", end_time);
 }
 
 void take_shot(Game *game)
@@ -1343,6 +1342,7 @@ void take_shot(Game *game)
     game->current_frame.shot_history[game->current_frame.num_shots] = game->current_shot;
     game->current_frame.num_shots++;
     Shot shot;
+    shot.player = &(game->players[game->current_player]);
     shot.ball_paths = malloc(game->scene.ball_set.num_balls * sizeof(Path));
     shot.events = malloc(10 * sizeof(ShotEvent));
     shot.num_events = 0;
@@ -1457,7 +1457,7 @@ Game *new_game()
     {
         game->players[i].game = game;
     }
-    game->players[0].type = HUMAN;
+    game->players[0].type = AI;
     game->players[1].type = AI;
     game->players[0].pot_ball = pot_ball3;
     game->players[1].pot_ball = pot_ball3;
@@ -1473,6 +1473,7 @@ Game *new_game()
     game->current_frame.shot_history = malloc(game->current_frame.shot_capacity * sizeof(Shot));
     game->current_frame.winner = NULL;
     Shot shot;
+    shot.player = &(game->players[game->current_player]);
     shot.ball_paths = malloc(game->scene.ball_set.num_balls * sizeof(Path));
     shot.events = malloc(10 * sizeof(ShotEvent));
     shot.num_events = 0;
@@ -1481,6 +1482,8 @@ Game *new_game()
     game->num_frames = 0;
     game->frame_capacity = 10;
     game->frames = malloc(game->frame_capacity * sizeof(Frame));
+    game->p1_stats = (Stats){0, 0, 0};
+    game->p2_stats = (Stats){0, 0, 0};
     return game;
 }
 
@@ -1575,15 +1578,11 @@ bool apply_game_rules(Game *game)
             {
                 cue_ball_potted = true;
             }
-
-            printf("%d ball potted\n", event.ball1->id);
         }
     }
     cue_ball->pocketed = false;
-    printf("9 ball potted: %d\n", nine_ball_potted);
     if (nine_ball_potted)
     {
-        printf("9 ball potted\n");
         if (!legal_first_hit || cue_ball_potted)
         {
             game->current_frame.winner = &(game->players[(game->current_player + 1) % game->num_players]);
@@ -1600,7 +1599,6 @@ bool apply_game_rules(Game *game)
         game->frames[game->num_frames] = game->current_frame;
         game->num_frames++;
         setup_new_frame(game);
-        printf("Frame ended\n");
     }
     if (!legal_first_hit || !ball_potted)
     {
@@ -1613,6 +1611,57 @@ bool apply_game_rules(Game *game)
         return false;
     }
     return legal_first_hit && ball_potted;
+}
+
+void update_stats(Game *game)
+{
+    game->p1_stats = (Stats){0, 0, 0};
+    game->p2_stats = (Stats){0, 0, 0};
+    for (int i = 0; i < game->num_frames; i++)
+    {
+        Frame frame = game->frames[i];
+        for (int j = 0; j < frame.num_shots; j++)
+        {
+            Shot shot = frame.shot_history[j];
+            if (shot.player == &(game->players[0]))
+            {
+                game->p1_stats.num_shots++;
+            }
+            else if (shot.player == &(game->players[1]))
+            {
+                game->p2_stats.num_shots++;
+            }
+            for (int k = 0; k < shot.num_events; k++)
+            {
+                ShotEvent event = shot.events[k];
+                if (event.type == BALL_POCKETED)
+                {
+                    if (event.ball1->id == 0)
+                    {
+                        if (shot.player == &(game->players[0]))
+                        {
+                            game->p1_stats.num_fouls++;
+                        }
+                        else if (shot.player == &(game->players[1]))
+                        {
+                            game->p2_stats.num_fouls++;
+                        }
+                    }
+                    else
+                    {
+                        if (shot.player == &(game->players[0]))
+                        {
+                            game->p1_stats.num_pots++;
+                        }
+                        else if (shot.player == &(game->players[1]))
+                        {
+                            game->p2_stats.num_pots++;
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 bool update_game(Game *game)
@@ -1640,6 +1689,10 @@ bool update_game(Game *game)
             game->playback_speed -= 2;
             game->default_playback_speed -= 2;
         }
+    }
+    else if (IsKeyPressed(KEY_R))
+    {
+        update_stats(game);
     }
     else if (IsKeyPressed(KEY_ENTER))
     {
