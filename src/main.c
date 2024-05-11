@@ -149,6 +149,7 @@ typedef struct
 typedef enum
 {
     MAIN_MENU,
+    SELECT,
     GAMEPLAY,
     GAME_OVER
 } GameScreen;
@@ -163,6 +164,8 @@ typedef struct
 typedef struct Game
 {
     GameScreen screen;
+
+    bool playing;
 
     Scene scene;
     Player *players;
@@ -1449,6 +1452,7 @@ void pot_ball3(Game *game, Ball *ball)
 Game *new_game()
 {
     Game *game = malloc(sizeof(Game));
+    game->playing = false;
     game->screen = MAIN_MENU;
     game->scene = new_scene();
     game->num_players = 2;
@@ -1500,11 +1504,30 @@ void render_menu()
     DrawText("Press Enter to start game", 10, 10, 20, BLACK);
 }
 
+void render_select_screen(Game *game)
+{
+    ClearBackground(RAYWHITE);
+    Color colour;
+    char player1_text[100];
+    sprintf(player1_text, "Player 1: %s", game->players[0].type == HUMAN ? "Human" : "AI");
+    colour = game->current_player == 0 ? RED : BLACK;
+    DrawText(player1_text, 10, 10, 20, colour);
+    char player2_text[100];
+    sprintf(player2_text, "Player 2: %s", game->players[1].type == HUMAN ? "Human" : "AI");
+    colour = game->current_player == 1 ? RED : BLACK;
+    DrawText(player2_text, 10, 40, 20, colour);
+    DrawText("Press Enter to start game", 10, 70, 20, BLACK);
+}
+
 void render_game(Game *game)
 {
     if (game->screen == MAIN_MENU)
     {
         render_menu();
+    }
+    else if (game->screen == SELECT)
+    {
+        render_select_screen(game);
     }
     else if (game->screen == GAMEPLAY)
     {
@@ -1670,8 +1693,39 @@ bool update_game(Game *game)
     {
         if (IsKeyPressed(KEY_ENTER))
         {
-            game->screen = GAMEPLAY;
+            game->screen = SELECT;
         }
+        return true;
+    }
+    else if (game->screen == SELECT)
+    {
+        if (IsKeyPressed(KEY_ENTER))
+        {
+            game->screen = GAMEPLAY;
+            game->playing = true;
+        }
+        if (IsKeyPressed(KEY_RIGHT))
+        {
+            game->current_player = (game->current_player + 1) % game->num_players;
+        }
+        if (IsKeyPressed(KEY_LEFT))
+        {
+            game->current_player = (game->current_player - 1) % game->num_players;
+        }
+        if (IsKeyPressed(KEY_UP))
+        {
+            if (game->players[game->current_player].type == HUMAN)
+            {
+                game->players[game->current_player].type = AI;
+            }
+            else
+            {
+                game->players[game->current_player].type = HUMAN;
+            }
+        }
+    }
+    if (!game->playing)
+    {
         return true;
     }
     if (IsKeyPressed(KEY_UP))
