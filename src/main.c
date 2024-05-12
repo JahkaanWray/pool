@@ -1,3 +1,5 @@
+#include <string.h>
+#include <dirent.h>
 #include <stdbool.h>
 #include <assert.h>
 #include <stdlib.h>
@@ -201,6 +203,9 @@ typedef struct Game
     PlayerPotBallFunction *pot_ball_functions;
     int num_pot_ball_functions;
 
+    char *library_paths[10];
+    int num_libraries;
+    int selected_library;
 } Game;
 
 void shot_add_event(Shot *shot, ShotEvent event)
@@ -1501,6 +1506,8 @@ Game *new_game()
     game->p2_stats = (Stats){0, 0, 0};
     game->pot_ball_functions = malloc(10 * sizeof(PlayerPotBallFunction));
     game->num_pot_ball_functions = 0;
+    game->num_libraries = 0;
+    game->selected_library = 0;
     return game;
 }
 
@@ -1531,11 +1538,10 @@ void render_select_screen(Game *game)
     DrawText(player2_text, 10, 40, 20, colour);
     DrawText("Press Enter to start game", 10, 70, 20, BLACK);
 
-    for (int i = 0; i < game->num_pot_ball_functions; i++)
+    for (int i = 0; i < game->num_libraries; i++)
     {
-        char function_text[100];
-        sprintf(function_text, "Function %d", i);
-        DrawText(function_text, 10, 100 + 30 * i, 20, BLACK);
+        colour = game->selected_library == i ? RED : BLACK;
+        DrawText(game->library_paths[i], 10, 100 + 30 * i, 20, colour);
     }
 }
 
@@ -1714,9 +1720,37 @@ bool update_game(Game *game)
         if (IsKeyPressed(KEY_ENTER))
         {
             game->screen = SELECT;
+
+            // List shared object files
+
+            DIR *dir;
+            struct dirent *ent;
+            int i = 0;
+            const char *current_dir = ".";
+            const char *parent_dir = "..";
+            if ((dir = opendir("./player_modules")) != NULL)
+            {
+                while ((ent = readdir(dir)) != NULL)
+                {
+                    char *name = ent->d_name;
+                    if (strcmp(name, current_dir) == 0 || strcmp(name, parent_dir) == 0)
+                    {
+                        continue;
+                    }
+                    printf("%s\n", name);
+                    game->library_paths[i++] = name;
+                    game->num_libraries++;
+                }
+                closedir(dir);
+            }
+            else
+            {
+                perror("");
+                return false;
+            }
             // Load shared object files
-            void *handle = dlopen("./libplayer.so", RTLD_LAZY);
-            if (handle == NULL)
+            void *handle1 = dlopen("./player_modules/libplayer1.so", RTLD_LAZY);
+            if (handle1 == NULL)
             {
                 printf("Error loading shared object\n");
                 printf("%s\n", dlerror());
@@ -1725,7 +1759,7 @@ bool update_game(Game *game)
             {
                 printf("Shared object loaded\n");
             }
-            void *function = dlsym(handle, "pot_ball1");
+            void *function = dlsym(handle1, "pot_ball");
             if (function == NULL)
             {
                 printf("Error loading function\n");
@@ -1735,13 +1769,18 @@ bool update_game(Game *game)
             {
                 printf("Function loaded\n");
             }
+            char *description = *(char **)dlsym(handle1, "description");
+            // Cast description to char* and print it
+
+            printf("%s\n", description);
 
             game->pot_ball_functions[game->num_pot_ball_functions] = function;
             game->num_pot_ball_functions++;
 
             game->players[0].pot_ball = function;
 
-            function = dlsym(handle, "pot_ball2");
+            void *handle2 = dlopen("./player_modules/libplayer2.so", RTLD_LAZY);
+            function = dlsym(handle2, "pot_ball");
             if (function == NULL)
             {
                 printf("Error loading function\n");
@@ -1751,6 +1790,9 @@ bool update_game(Game *game)
             {
                 printf("Function loaded\n");
             }
+
+            description = *(char **)dlsym(handle2, "description");
+            printf("%s\n", description);
 
             game->pot_ball_functions[game->num_pot_ball_functions] = function;
             game->num_pot_ball_functions++;
@@ -1784,6 +1826,10 @@ bool update_game(Game *game)
             {
                 game->players[game->current_player].type = HUMAN;
             }
+        }
+        if (IsKeyPressed(KEY_J))
+        {
+            game->selected_library = (game->selected_library + 1) % game->num_libraries;
         }
     }
     if (!game->playing)

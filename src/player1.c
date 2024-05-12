@@ -1,8 +1,8 @@
 #include "player.h"
-#include <raymath.h>
-#include <raylib.h>
 
-void pot_ball1(Game *game, Ball *ball)
+char *description = "This player finds the first ball that can be potted and calculates the required power to pot it. If no balls can be potted, it hits the cue ball directly at the target ball with a fixed power.";
+
+void pot_ball(Game *game, Ball *ball)
 {
     Ball *target_ball = ball;
     Ball *cue_ball = &(game->scene.ball_set.balls[0]);
@@ -78,10 +78,4 @@ void pot_ball1(Game *game, Ball *ball)
 
         game->v = Vector3Scale(Vector3Normalize(Vector3Subtract(p_target, p_cue)), 800);
     }
-}
-
-void pot_ball2(Game *game, Ball *ball)
-{
-    game->v = (Vector3){100, 0, 0};
-    game->w = (Vector3){0, 0, 0};
 }
