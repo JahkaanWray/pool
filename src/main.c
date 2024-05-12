@@ -6,6 +6,7 @@
 #include <raylib.h>
 #include <raymath.h>
 #include <complex.h>
+#include <dlfcn.h>
 #include "polynomial.h"
 
 typedef struct
@@ -161,6 +162,12 @@ typedef struct
     int num_fouls;
 } Stats;
 
+typedef struct
+{
+    void (*update)(struct Game *game);
+    void (*render)(struct Game *game);
+} Screen;
+
 typedef struct Game
 {
     GameScreen screen;
@@ -190,6 +197,10 @@ typedef struct Game
 
     Stats p1_stats;
     Stats p2_stats;
+
+    PlayerPotBallFunction *pot_ball_functions;
+    int num_pot_ball_functions;
+
 } Game;
 
 void shot_add_event(Shot *shot, ShotEvent event)
@@ -1488,6 +1499,8 @@ Game *new_game()
     game->frames = malloc(game->frame_capacity * sizeof(Frame));
     game->p1_stats = (Stats){0, 0, 0};
     game->p2_stats = (Stats){0, 0, 0};
+    game->pot_ball_functions = malloc(10 * sizeof(PlayerPotBallFunction));
+    game->num_pot_ball_functions = 0;
     return game;
 }
 
@@ -1517,6 +1530,13 @@ void render_select_screen(Game *game)
     colour = game->current_player == 1 ? RED : BLACK;
     DrawText(player2_text, 10, 40, 20, colour);
     DrawText("Press Enter to start game", 10, 70, 20, BLACK);
+
+    for (int i = 0; i < game->num_pot_ball_functions; i++)
+    {
+        char function_text[100];
+        sprintf(function_text, "Function %d", i);
+        DrawText(function_text, 10, 100 + 30 * i, 20, BLACK);
+    }
 }
 
 void render_game(Game *game)
@@ -1694,6 +1714,48 @@ bool update_game(Game *game)
         if (IsKeyPressed(KEY_ENTER))
         {
             game->screen = SELECT;
+            // Load shared object files
+            void *handle = dlopen("./libplayer.so", RTLD_LAZY);
+            if (handle == NULL)
+            {
+                printf("Error loading shared object\n");
+                printf("%s\n", dlerror());
+            }
+            else
+            {
+                printf("Shared object loaded\n");
+            }
+            void *function = dlsym(handle, "pot_ball1");
+            if (function == NULL)
+            {
+                printf("Error loading function\n");
+                printf("%s\n", dlerror());
+            }
+            else
+            {
+                printf("Function loaded\n");
+            }
+
+            game->pot_ball_functions[game->num_pot_ball_functions] = function;
+            game->num_pot_ball_functions++;
+
+            game->players[0].pot_ball = function;
+
+            function = dlsym(handle, "pot_ball2");
+            if (function == NULL)
+            {
+                printf("Error loading function\n");
+                printf("%s\n", dlerror());
+            }
+            else
+            {
+                printf("Function loaded\n");
+            }
+
+            game->pot_ball_functions[game->num_pot_ball_functions] = function;
+            game->num_pot_ball_functions++;
+
+            game->players[1].pot_ball = function;
         }
         return true;
     }
