@@ -1,27 +1,60 @@
-#include <string.h>
-#include <dirent.h>
-#include <stdbool.h>
-#include <assert.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <math.h>
-#include <raylib.h>
-#include <raymath.h>
-#include <complex.h>
-#include <dlfcn.h>
-#include "polynomial.h"
-#include "screen.h"
-#include "mainmenuscreen.h"
-#include "selectscreen.h"
-#include "gameplayscreen.h"
 #include "game.h"
-#include "player.h"
+#include "polynomial.h"
+#include <stdlib.h>
+#include <raylib.h>
+#include <assert.h>
 
-typedef struct App
+void update_stats(Game *game)
 {
-    Screen *current_screen;
-} App;
-/*
+    game->p1_stats = (Stats){0, 0, 0};
+    game->p2_stats = (Stats){0, 0, 0};
+    for (int i = 0; i < game->num_frames; i++)
+    {
+        Frame frame = game->frames[i];
+        for (int j = 0; j < frame.num_shots; j++)
+        {
+            Shot shot = frame.shot_history[j];
+            if (shot.player == &(game->players[0]))
+            {
+                game->p1_stats.num_shots++;
+            }
+            else if (shot.player == &(game->players[1]))
+            {
+                game->p2_stats.num_shots++;
+            }
+            for (int k = 0; k < shot.num_events; k++)
+            {
+                ShotEvent event = shot.events[k];
+                if (event.type == BALL_POCKETED)
+                {
+                    if (event.ball1->id == 0)
+                    {
+                        if (shot.player == &(game->players[0]))
+                        {
+                            game->p1_stats.num_fouls++;
+                        }
+                        else if (shot.player == &(game->players[1]))
+                        {
+                            game->p2_stats.num_fouls++;
+                        }
+                    }
+                    else
+                    {
+                        if (shot.player == &(game->players[0]))
+                        {
+                            game->p1_stats.num_pots++;
+                        }
+                        else if (shot.player == &(game->players[1]))
+                        {
+                            game->p2_stats.num_pots++;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 void shot_add_event(Shot *shot, ShotEvent event)
 {
     if (shot->num_events == shot->event_capacity)
@@ -152,7 +185,7 @@ void free_path(Path *path)
     path->capacity = 0;
 }
 
-bool detect_ball_cushion_collision(GameplayScreen *game, Ball ball, Cushion *cushion, double *t)
+bool detect_ball_cushion_collision(Game *game, Ball ball, Cushion *cushion, double *t)
 {
     double collision_time = INFINITY;
     PathSegment *segment = &(ball.path.segments[ball.path.num_segments - 1]);
@@ -182,7 +215,7 @@ bool detect_ball_cushion_collision(GameplayScreen *game, Ball ball, Cushion *cus
     double collision_time1 = segment->start_time + (-vn + sqrt(discriminant)) / an;
     double collision_time2 = segment->start_time + (-vn - sqrt(discriminant)) / an;
     bool repeat_collision = false;
-    Shot *current_shot = &(game->frames[game->num_frames - 1].shot_history[game->frames[game->num_frames - 1].num_shots - 1]);
+    Shot *current_shot = &(game->current_shot);
     ShotEvent *events = current_shot->events;
     ShotEvent last_event = {NONE, NULL, NULL, NULL, NULL, 0};
     if (current_shot->num_events > 0)
@@ -215,7 +248,7 @@ bool detect_ball_cushion_collision(GameplayScreen *game, Ball ball, Cushion *cus
     return true;
 }
 
-bool detect_ball_ball_collision(GameplayScreen *game, Ball ball1, Ball ball2, double *t)
+bool detect_ball_ball_collision(Game *game, Ball ball1, Ball ball2, double *t)
 {
     PathSegment *segment1 = &(ball1.path.segments[ball1.path.num_segments - 1]);
     PathSegment *segment2 = &(ball2.path.segments[ball2.path.num_segments - 1]);
@@ -257,7 +290,7 @@ bool detect_ball_ball_collision(GameplayScreen *game, Ball ball1, Ball ball2, do
 
     double collision_time = INFINITY;
     bool repeat_collision = false;
-    Shot *current_shot = &(game->frames[game->num_frames - 1].shot_history[game->frames[game->num_frames - 1].num_shots - 1]);
+    Shot *current_shot = &(game->current_shot);
     ShotEvent *events = current_shot->events;
     ShotEvent last_event = {NONE, NULL, NULL, NULL, NULL, 0};
     if (current_shot->num_events > 0)
@@ -298,7 +331,7 @@ bool detect_ball_ball_collision(GameplayScreen *game, Ball ball1, Ball ball2, do
     return true;
 }
 
-bool detect_ball_pocket_collision(GameplayScreen *game, Ball ball, Pocket pocket, double *t)
+bool detect_ball_pocket_collision(Game *game, Ball ball, Pocket pocket, double *t)
 {
     PathSegment *segment1 = &(ball.path.segments[ball.path.num_segments - 1]);
     Vector3 p1 = segment1->initial_position;
@@ -372,7 +405,7 @@ bool detect_ball_pocket_collision(GameplayScreen *game, Ball ball, Pocket pocket
 
     double collision_time = INFINITY;
     bool repeat_collision = false;
-    Shot *current_shot = &(game->frames[game->num_frames - 1].shot_history[game->frames[game->num_frames - 1].num_shots - 1]);
+    Shot *current_shot = &(game->current_shot);
     ShotEvent *events = current_shot->events;
     ShotEvent last_event = {NONE, NULL, NULL, NULL, NULL, 0};
     if (current_shot->num_events > 0)
@@ -495,7 +528,7 @@ void resolve_stop(Ball *ball, double time)
     add_segment(&(ball->path), stop_segment);
 }
 
-bool update_path(GameplayScreen *game)
+bool update_path(Game *game)
 {
     ShotEventType update_type = NONE;
     double first_time = INFINITY;
@@ -600,7 +633,7 @@ bool update_path(GameplayScreen *game)
         resolve_stop(ball1, first_time);
     }
     ShotEvent event = {update_type, ball1, ball2, cushion, &pocket, first_time};
-    Shot *current_shot = &(game->frames[game->num_frames - 1].shot_history[game->frames[game->num_frames - 1].num_shots - 1]);
+    Shot *current_shot = &(game->current_shot);
     if (current_shot->num_events > 0)
     {
         assert(first_time >= current_shot->events[current_shot->num_events - 1].time);
@@ -609,7 +642,7 @@ bool update_path(GameplayScreen *game)
     return true;
 }
 
-void generate_paths(GameplayScreen *game, Ball *ball, Vector3 initial_position, Vector3 initial_velocity, Vector3 initial_angular_velocity, double start_time)
+void generate_paths(Game *game, Ball *ball, Vector3 initial_position, Vector3 initial_velocity, Vector3 initial_angular_velocity, double start_time)
 {
     for (int i = 0; i < game->scene.ball_set.num_balls; i++)
     {
@@ -869,6 +902,351 @@ Vector3 get_ball_position(Ball ball, double time)
     return ball.initial_position;
 }
 
+Table create_table()
+{
+    Table table;
+    table.cushions = malloc(4 * sizeof(Cushion));
+    table.num_cushions = 4;
+    table.cushion_capacity = 4;
+    table.cushions[0] = (Cushion){{100, 100, 0}, {800, 100, 0}};
+    table.cushions[1] = (Cushion){{800, 100, 0}, {800, 800, 0}};
+    table.cushions[2] = (Cushion){{800, 800, 0}, {100, 800, 0}};
+    table.cushions[3] = (Cushion){{100, 800, 0}, {100, 100, 0}};
+    table.num_pockets = 4;
+    table.pockets = malloc(table.num_pockets * sizeof(Pocket));
+    table.pocket_capacity = table.num_pockets;
+    table.pockets[0] = (Pocket){100, 100, 0, 20};
+    table.pockets[1] = (Pocket){800, 100, 0, 20};
+    table.pockets[2] = (Pocket){800, 800, 0, 20};
+    table.pockets[3] = (Pocket){100, 800, 0, 20};
+    return table;
+}
+Scene create_scene()
+{
+    Scene scene;
+    scene.table = create_table();
+    scene.ball_set = standard_ball_set();
+    Coefficients coefficients;
+    coefficients.mu_slide = 15.5;
+    coefficients.mu_roll = 2.6;
+    coefficients.mu_ball_cushion = 0.5;
+    coefficients.mu_ball_ball = 0.5;
+    coefficients.g = 9.8;
+    coefficients.e_ball_ball = 1;
+    coefficients.e_ball_cushion = 1;
+    coefficients.e_ball_table = 0.9;
+
+    scene.coefficients = coefficients;
+
+    return scene;
+}
+
+void setup_new_frame(Game *game)
+{
+    if (game->num_frames == game->frame_capacity)
+    {
+        game->frame_capacity *= 2;
+        game->frames = realloc(game->frames, game->frame_capacity * sizeof(Frame));
+    }
+    Frame *current_frame = &(game->frames[game->num_frames++]);
+    current_frame->num_shots = 0;
+    current_frame->winner = NULL;
+    current_frame->shot_capacity = 10;
+    current_frame->shot_history = malloc(current_frame->shot_capacity * sizeof(Shot));
+
+    for (int i = 0; i < game->scene.ball_set.num_balls; i++)
+    {
+        Ball *ball = &(game->scene.ball_set.balls[i]);
+        ball->pocketed = false;
+        ball->path.num_segments = 0;
+        ball->initial_position = (Vector3){GetRandomValue(200, 700), 200 + 50 * i, 0};
+    }
+}
+bool apply_game_rules(Game *game)
+{
+    Ball *cue_ball = &(game->scene.ball_set.balls[0]);
+    Ball *target_ball = NULL;
+    Ball *nine_ball = &(game->scene.ball_set.balls[9]);
+    for (int i = 1; i < game->scene.ball_set.num_balls; i++)
+    {
+        Ball *ball = &(game->scene.ball_set.balls[i]);
+        if (!ball->pocketed)
+        {
+            target_ball = ball;
+            break;
+        }
+    }
+    if (target_ball == NULL)
+    {
+        game->current_player = (game->current_player + 1) % game->num_players;
+        return false;
+    }
+    Shot last_shot = game->frames[game->num_frames - 1].shot_history[game->frames[game->num_frames - 1].num_shots - 1];
+    bool ball_potted = false;
+    bool legal_first_hit = false;
+    bool nine_ball_potted = false;
+    bool cue_ball_potted = false;
+    for (int i = 0; i < last_shot.num_events; i++)
+    {
+        ShotEvent event = last_shot.events[i];
+        if (event.type == BALL_BALL_COLLISION && (event.ball1->id == 0 && event.ball2->id == target_ball->id || event.ball1->id == target_ball->id && event.ball2->id == 0))
+        {
+            legal_first_hit = true;
+            break;
+        }
+    }
+    for (int i = 0; i < last_shot.num_events; i++)
+    {
+        ShotEvent event = last_shot.events[i];
+        if (event.type == BALL_POCKETED)
+        {
+            event.ball1->pocketed = true;
+            ball_potted = true;
+            if (event.ball1->id == 9)
+            {
+                nine_ball_potted = true;
+            }
+            if (event.ball1->id == 0)
+            {
+                cue_ball_potted = true;
+            }
+        }
+    }
+    cue_ball->pocketed = false;
+    if (nine_ball_potted)
+    {
+        Frame *current_frame = &(game->frames[game->num_frames - 1]);
+        if (!legal_first_hit || cue_ball_potted)
+        {
+            current_frame->winner = &(game->players[(game->current_player + 1) % game->num_players]);
+        }
+        else
+        {
+            current_frame->winner = &(game->players[game->current_player]);
+        }
+        setup_new_frame(game);
+    }
+    if (!legal_first_hit || !ball_potted)
+    {
+        game->current_player = (game->current_player + 1) % game->num_players;
+        return false;
+    }
+    if (legal_first_hit && cue_ball_potted)
+    {
+        game->current_player = (game->current_player + 1) % game->num_players;
+        return false;
+    }
+    return legal_first_hit && ball_potted;
+}
+
+void generate_shot(Game *game, Vector3 velocity, Vector3 angular_velocity)
+{
+    Ball *cue_ball = &(game->scene.ball_set.balls[0]);
+    game->current_shot.num_events = 0;
+    generate_paths(game, cue_ball, cue_ball->initial_position, velocity, angular_velocity, 0);
+    double end_time = 0;
+    for (int i = 0; i < game->scene.ball_set.num_balls; i++)
+    {
+        game->current_shot.ball_paths[i] = game->scene.ball_set.balls[i].path;
+        Path path = game->scene.ball_set.balls[i].path;
+        PathSegment last_segment = path.segments[path.num_segments - 1];
+        if (last_segment.start_time > end_time)
+        {
+            end_time = last_segment.start_time;
+        }
+    }
+    game->current_shot.end_time = end_time + 1;
+}
+
+void clear_paths(Scene *scene)
+{
+    for (int i = 0; i < scene->ball_set.num_balls; i++)
+    {
+        scene->ball_set.balls[i].path.num_segments = 0;
+    }
+}
+
+void take_shot(Game *game)
+{
+    Frame *current_frame = &(game->frames[game->num_frames - 1]);
+    Shot current_shot = game->current_shot;
+    if (current_frame->num_shots == current_frame->shot_capacity)
+    {
+        current_frame->shot_capacity *= 2;
+        current_frame->shot_history = realloc(current_frame->shot_history, current_frame->shot_capacity * sizeof(Shot));
+    }
+    current_frame->shot_history[current_frame->num_shots++] = current_shot;
+    Shot shot;
+    shot.player = &(game->players[game->current_player]);
+    shot.ball_paths = malloc(game->scene.ball_set.num_balls * sizeof(Path));
+    shot.events = malloc(10 * sizeof(ShotEvent));
+    shot.num_events = 0;
+    shot.event_capacity = 10;
+    game->current_shot = shot;
+}
+
+Game *create_game(Player *players, int num_players)
+{
+    Game *game = malloc(sizeof(Game));
+    game->scene = create_scene();
+    game->num_players = num_players;
+    game->players = malloc(sizeof(Player) * num_players);
+    for (int i = 0; i < num_players; i++)
+    {
+        game->players[i] = players[i];
+        game->players[i].game = game;
+    }
+    game->current_player = 0;
+    game->num_frames = 0;
+    game->frame_capacity = 10;
+    game->frames = malloc(sizeof(Frame) * game->frame_capacity);
+    setup_new_frame(game);
+    Shot shot;
+    shot.ball_paths = malloc(game->scene.ball_set.num_balls * sizeof(Path));
+    shot.event_capacity = 10;
+    shot.events = malloc(shot.event_capacity * sizeof(ShotEvent));
+    shot.num_events = 0;
+    game->current_shot = shot;
+
+    game->state = BEFORE_SHOT;
+    game->time = 0;
+    game->playback_speed = 1;
+    game->default_playback_speed = 1;
+
+    game->v = (Vector3){0, 0, 0};
+    game->w = (Vector3){0, 0, 0};
+
+    game->p1_stats = (Stats){0, 0, 0};
+    game->p2_stats = (Stats){0, 0, 0};
+}
+
+void update_game(Game *game)
+{
+    if (IsKeyPressed(KEY_UP))
+    {
+        if (game->state == DURING_SHOT)
+        {
+            game->playback_speed += 2;
+            game->default_playback_speed += 2;
+        }
+    }
+    else if (IsKeyPressed(KEY_DOWN))
+    {
+        if (game->state == DURING_SHOT)
+        {
+            game->playback_speed -= 2;
+            game->default_playback_speed -= 2;
+        }
+    }
+    else if (IsKeyPressed(KEY_R))
+    {
+        update_stats(game);
+    }
+    else if (IsKeyPressed(KEY_ENTER))
+    {
+        if (game->state == BEFORE_SHOT)
+        {
+            if (game->players[game->current_player].type == HUMAN)
+            {
+                take_shot(game);
+                game->state = DURING_SHOT;
+                game->time = 0;
+                game->playback_speed = game->default_playback_speed;
+            }
+        }
+        else if (game->state == DURING_SHOT)
+        {
+        }
+        else if (game->state == AFTER_SHOT)
+        {
+            game->state = BEFORE_SHOT;
+        }
+    }
+    if (game->state == BEFORE_SHOT)
+    {
+        if (game->players[game->current_player].type == HUMAN)
+        {
+            int mx, my;
+            Vector2 mouse_position = GetMousePosition();
+            mx = mouse_position.x;
+            my = mouse_position.y;
+            if (mx > 1450 && mx < 1530 && my > 10 && my < 890)
+            {
+                game->v = Vector3Scale(Vector3Normalize(game->v), 890 - my);
+            }
+            if (mx > 1550 && mx < 1630 && my > 10 && my < 890)
+            {
+                game->w = Vector3Scale(Vector3Normalize(game->w), 890 - my);
+            }
+            if (mx > 0 && mx < 100 && my > 700 && my < 800)
+            {
+                double v_mag = Vector3Length(game->v);
+                game->v = Vector3Normalize((Vector3){mx - 50, my - 750, 0});
+                game->v = Vector3Scale(game->v, v_mag);
+            }
+            if (mx > 0 && mx < 100 && my > 800 && my < 900)
+            {
+                double w_mag = Vector3Length(game->w);
+                game->w = Vector3Normalize((Vector3){mx - 50, my - 850, 0});
+                game->w = Vector3Scale(game->w, w_mag);
+            }
+            // solve_direct_shot(&scene, scene.ball_set.balls[0].initial_position, target_position, v_roll, &required_velocity, &required_angular_velocity);
+            game->v = Vector3Subtract((Vector3){mx, my, 0}, game->scene.ball_set.balls[0].initial_position);
+            clear_paths(&(game->scene));
+            generate_shot(game, game->v, game->w);
+            game->time = 0;
+            game->playback_speed = 0;
+        }
+        else if (game->players[game->current_player].type == AI)
+        {
+            // solve_direct_shot(&(game->scene), game->scene.ball_set.balls[0].initial_position, (Vector3){600, 200, 0}, (Vector3){0, 5, 0}, &(game->v), &(game->w));
+
+            Ball *target_ball = NULL;
+            for (int i = 1; i < game->scene.ball_set.num_balls; i++)
+            {
+                Ball *ball = &(game->scene.ball_set.balls[i]);
+                if (!ball->pocketed)
+                {
+                    target_ball = ball;
+                    break;
+                }
+            }
+            PlayerPotBallFunction pot_ball_function = game->players[game->current_player].module.pot_ball;
+            pot_ball_function(game, target_ball);
+            clear_paths(&(game->scene));
+            generate_shot(game, game->v, game->w);
+            take_shot(game);
+            game->time = 0;
+            game->playback_speed = game->default_playback_speed;
+            game->state = DURING_SHOT;
+        }
+    }
+    else if (game->state == DURING_SHOT)
+    {
+        game->time += game->playback_speed / 60;
+        Frame *current_frame = &(game->frames[game->num_frames - 1]);
+        if (game->time > current_frame->shot_history[current_frame->num_shots - 1].end_time)
+        {
+            game->state = AFTER_SHOT;
+        }
+    }
+    else if (game->state == AFTER_SHOT)
+    {
+        apply_game_rules(game);
+
+        game->state = BEFORE_SHOT;
+        for (int i = 0; i < game->scene.ball_set.num_balls; i++)
+        {
+            Ball *ball = &(game->scene.ball_set.balls[i]);
+            ball->initial_position = get_ball_position(*ball, game->time);
+            ball->path.num_segments = 0;
+        }
+        clear_paths(&(game->scene));
+        game->time = 0;
+        game->playback_speed = 0;
+    }
+}
+
 void render_ball(Ball ball, double time)
 {
     Vector3 position = get_ball_position(ball, time);
@@ -888,26 +1266,6 @@ void render_scene(Scene scene, double time)
 {
     render_table(scene.table);
     render_ball_set(scene.ball_set, time);
-}
-
-Scene new_scene()
-{
-    Scene scene;
-    scene.table = new_table();
-    scene.ball_set = standard_ball_set();
-    Coefficients coefficients;
-    coefficients.mu_slide = 15.5;
-    coefficients.mu_roll = 2.6;
-    coefficients.mu_ball_cushion = 0.5;
-    coefficients.mu_ball_ball = 0.5;
-    coefficients.g = 9.8;
-    coefficients.e_ball_ball = 1;
-    coefficients.e_ball_cushion = 1;
-    coefficients.e_ball_table = 0.9;
-
-    scene.coefficients = coefficients;
-
-    return scene;
 }
 
 void render_UI(Game *game, Vector3 v, Vector3 w)
@@ -1074,514 +1432,9 @@ void render_UI(Game *game, Vector3 v, Vector3 w)
     DrawText(player2_stats, 10, 310, 20, WHITE);
 }
 
-void generate_shot(GameplayScreen *game, Vector3 velocity, Vector3 angular_velocity)
+void render_game(Game *game)
 {
-    Ball *cue_ball = &(game->scene.ball_set.balls[0]);
-    Shot current_shot = game->frames[game->num_frames - 1].shot_history[game->frames[game->num_frames - 1].num_shots - 1];
-    current_shot.num_events = 0;
-    generate_paths(game, cue_ball, cue_ball->initial_position, velocity, angular_velocity, 0);
-    double end_time = 0;
-    for (int i = 0; i < game->scene.ball_set.num_balls; i++)
-    {
-        current_shot.ball_paths[i] = game->scene.ball_set.balls[i].path;
-        Path path = game->scene.ball_set.balls[i].path;
-        PathSegment last_segment = path.segments[path.num_segments - 1];
-        if (last_segment.start_time > end_time)
-        {
-            end_time = last_segment.start_time;
-        }
-    }
-    current_shot.end_time = end_time + 1;
-}
-
-void take_shot(GameplayScreen *game)
-{
-    Frame current_frame = game->frames[game->num_frames - 1];
-    Shot current_shot = current_frame.shot_history[current_frame.num_shots - 1];
-    if (current_frame.num_shots == current_frame.shot_capacity)
-    {
-        current_frame.shot_capacity *= 2;
-        current_frame.shot_history = realloc(current_frame.shot_history, current_frame.shot_capacity * sizeof(Shot));
-    }
-    current_frame.shot_history[current_frame.num_shots] = current_shot;
-    current_frame.num_shots++;
-    Shot shot;
-    shot.player = &(game->players[game->current_player]);
-    shot.ball_paths = malloc(game->scene.ball_set.num_balls * sizeof(Path));
-    shot.events = malloc(10 * sizeof(ShotEvent));
-    shot.num_events = 0;
-    shot.event_capacity = 10;
-    game->frames[game->num_frames - 1].shot_history[game->frames[game->num_frames - 1].num_shots - 1] = shot;
-}
-
-void clear_paths(Scene *scene)
-{
-    for (int i = 0; i < scene->ball_set.num_balls; i++)
-    {
-        scene->ball_set.balls[i].path.num_segments = 0;
-    }
-}
-
-void setup_new_frame(GameplayScreen *game)
-{
-    Frame *current_frame = &(game->frames[game->num_frames - 1]);
-    current_frame->num_shots = 0;
-    current_frame->winner = NULL;
-    current_frame->shot_capacity = 10;
-    current_frame->shot_history = malloc(current_frame->shot_capacity * sizeof(Shot));
-
-    for (int i = 0; i < game->scene.ball_set.num_balls; i++)
-    {
-        Ball *ball = &(game->scene.ball_set.balls[i]);
-        ball->pocketed = false;
-        ball->path.num_segments = 0;
-        ball->initial_position = (Vector3){GetRandomValue(200, 700), 200 + 50 * i, 0};
-    }
-}
-
-bool apply_game_rules(GameplayScreen *game)
-{
-    Ball *cue_ball = &(game->scene.ball_set.balls[0]);
-    Ball *target_ball = NULL;
-    Ball *nine_ball = &(game->scene.ball_set.balls[9]);
-    for (int i = 1; i < game->scene.ball_set.num_balls; i++)
-    {
-        Ball *ball = &(game->scene.ball_set.balls[i]);
-        if (!ball->pocketed)
-        {
-            target_ball = ball;
-            break;
-        }
-    }
-    if (target_ball == NULL)
-    {
-        game->current_player = (game->current_player + 1) % game->num_players;
-        return false;
-    }
-    Shot last_shot = game->frames[game->num_frames - 1].shot_history[game->frames[game->num_frames - 1].num_shots - 1];
-    bool ball_potted = false;
-    bool legal_first_hit = false;
-    bool nine_ball_potted = false;
-    bool cue_ball_potted = false;
-    for (int i = 0; i < last_shot.num_events; i++)
-    {
-        ShotEvent event = last_shot.events[i];
-        if (event.type == BALL_BALL_COLLISION && (event.ball1->id == 0 && event.ball2->id == target_ball->id || event.ball1->id == target_ball->id && event.ball2->id == 0))
-        {
-            legal_first_hit = true;
-            break;
-        }
-    }
-    for (int i = 0; i < last_shot.num_events; i++)
-    {
-        ShotEvent event = last_shot.events[i];
-        if (event.type == BALL_POCKETED)
-        {
-            event.ball1->pocketed = true;
-            ball_potted = true;
-            if (event.ball1->id == 9)
-            {
-                nine_ball_potted = true;
-            }
-            if (event.ball1->id == 0)
-            {
-                cue_ball_potted = true;
-            }
-        }
-    }
-    cue_ball->pocketed = false;
-    if (nine_ball_potted)
-    {
-        Frame *current_frame = &(game->frames[game->num_frames - 1]);
-        if (!legal_first_hit || cue_ball_potted)
-        {
-            current_frame->winner = &(game->players[(game->current_player + 1) % game->num_players]);
-        }
-        else
-        {
-            current_frame->winner = &(game->players[game->current_player]);
-        }
-        if (game->num_frames == game->frame_capacity)
-        {
-            game->frame_capacity *= 2;
-            game->frames = realloc(game->frames, game->frame_capacity * sizeof(Frame));
-        }
-        game->frames[game->num_frames] = game->current_frame;
-        game->num_frames++;
-        setup_new_frame(game);
-    }
-    if (!legal_first_hit || !ball_potted)
-    {
-        game->current_player = (game->current_player + 1) % game->num_players;
-        return false;
-    }
-    if (legal_first_hit && cue_ball_potted)
-    {
-        game->current_player = (game->current_player + 1) % game->num_players;
-        return false;
-    }
-    return legal_first_hit && ball_potted;
-}
-
-void update_stats(GameplayScreen *game)
-{
-    game->p1_stats = (Stats){0, 0, 0};
-    game->p2_stats = (Stats){0, 0, 0};
-    for (int i = 0; i < game->num_frames; i++)
-    {
-        Frame frame = game->frames[i];
-        for (int j = 0; j < frame.num_shots; j++)
-        {
-            Shot shot = frame.shot_history[j];
-            if (shot.player == &(game->players[0]))
-            {
-                game->p1_stats.num_shots++;
-            }
-            else if (shot.player == &(game->players[1]))
-            {
-                game->p2_stats.num_shots++;
-            }
-            for (int k = 0; k < shot.num_events; k++)
-            {
-                ShotEvent event = shot.events[k];
-                if (event.type == BALL_POCKETED)
-                {
-                    if (event.ball1->id == 0)
-                    {
-                        if (shot.player == &(game->players[0]))
-                        {
-                            game->p1_stats.num_fouls++;
-                        }
-                        else if (shot.player == &(game->players[1]))
-                        {
-                            game->p2_stats.num_fouls++;
-                        }
-                    }
-                    else
-                    {
-                        if (shot.player == &(game->players[0]))
-                        {
-                            game->p1_stats.num_pots++;
-                        }
-                        else if (shot.player == &(game->players[1]))
-                        {
-                            game->p2_stats.num_pots++;
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-Screen *gameplay_screen(Player *players, int num_players)
-{
-    GameplayScreen *gameplay_screen = (GameplayScreen *)malloc(sizeof(GameplayScreen));
-    gameplay_screen->base.update = update_gameplay_screen;
-    gameplay_screen->base.render = render_gameplay_screen;
-    Game game;
-    game.scene = new_scene();
-    game.num_players = num_players;
-    game.players = malloc(num_players * sizeof(Player));
-    for (int i = 0; i < num_players; i++)
-    {
-        game.players[i] = players[i];
-    }
-    game.current_player = 0;
-    game.state = BEFORE_SHOT;
-    game.time = 0;
-    game.playback_speed = 0;
-    game.default_playback_speed = 0;
-    game.v = (Vector3){0, 0, 0};
-    game.w = (Vector3){0, 0, 0};
-    game.p1_stats = (Stats){0, 0, 0};
-    game.p2_stats = (Stats){0, 0, 0};
-
-    game.frame_capacity = 10;
-    game.frames = malloc(game.frame_capacity * sizeof(Frame));
-    game.num_frames = 1;
-    setup_new_frame(&game);
-}
-
-Screen *update_select_screen(Screen *screen)
-{
-    SelectScreen *select_screen = (SelectScreen *)screen;
-    if (IsKeyPressed(KEY_UP))
-    {
-        if (select_screen->mode == SELECT_PLAYER)
-        {
-            select_screen->current_player = (select_screen->current_player - 1 + select_screen->num_players) % select_screen->num_players;
-        }
-        else if (select_screen->mode == SELECT_PLAYER_TYPE)
-        {
-            if (select_screen->players[select_screen->current_player].type == HUMAN)
-            {
-                select_screen->players[select_screen->current_player].type = AI;
-            }
-            else
-            {
-                select_screen->players[select_screen->current_player].type = HUMAN;
-            }
-        }
-        else if (select_screen->mode == SELECT_PLAYER_MODULE)
-        {
-            select_screen->selected_module = (select_screen->selected_module - 1 + select_screen->num_player_modules) % select_screen->num_player_modules;
-        }
-    }
-    if (IsKeyPressed(KEY_DOWN))
-    {
-        if (select_screen->mode == SELECT_PLAYER)
-        {
-            select_screen->current_player = (select_screen->current_player + 1) % select_screen->num_players;
-        }
-        else if (select_screen->mode == SELECT_PLAYER_TYPE)
-        {
-            if (select_screen->players[select_screen->current_player].type == HUMAN)
-            {
-                select_screen->players[select_screen->current_player].type = AI;
-            }
-            else
-            {
-                select_screen->players[select_screen->current_player].type = HUMAN;
-            }
-        }
-        else if (select_screen->mode == SELECT_PLAYER_MODULE)
-        {
-            select_screen->selected_module = (select_screen->selected_module + 1) % select_screen->num_player_modules;
-        }
-    }
-    if (IsKeyPressed(KEY_ENTER))
-    {
-        if (select_screen->mode == SELECT_PLAYER)
-        {
-            select_screen->mode = SELECT_PLAYER_TYPE;
-        }
-        else if (select_screen->mode == SELECT_PLAYER_TYPE)
-        {
-            select_screen->mode = SELECT_PLAYER_MODULE;
-        }
-        else if (select_screen->mode == SELECT_PLAYER_MODULE)
-        {
-            printf("Selected module: %s\n", select_screen->player_modules[select_screen->selected_module].name);
-            select_screen->players[select_screen->current_player].pot_ball = select_screen->player_modules[select_screen->selected_module].pot_ball;
-        }
-    }
-    if (IsKeyPressed(KEY_BACKSPACE))
-    {
-        MainMenuScreen *main_menu = (MainMenuScreen *)malloc(sizeof(MainMenuScreen));
-        main_menu->base.update = update_main_menu;
-        main_menu->base.render = render_main_menu;
-        free(screen);
-        return (Screen *)main_menu;
-    }
-    if (IsKeyPressed(KEY_SPACE))
-    {
-        GameplayScreen *gameplay_screen = (GameplayScreen *)malloc(sizeof(GameplayScreen));
-        gameplay_screen->base.update = update_gameplay_screen;
-        gameplay_screen->base.render = render_gameplay_screen;
-        gameplay_screen->scene = new_scene();
-        gameplay_screen->players = select_screen->players;
-        gameplay_screen->current_player = 0;
-        gameplay_screen->num_players = select_screen->num_players;
-        gameplay_screen->state = BEFORE_SHOT;
-        gameplay_screen->time = 0;
-        gameplay_screen->playback_speed = 0;
-        gameplay_screen->default_playback_speed = 0;
-        gameplay_screen->v = (Vector3){0, 0, 0};
-        gameplay_screen->w = (Vector3){0, 0, 0};
-        gameplay_screen->current_frame = (Frame){0};
-        gameplay_screen->frame_capacity = 10;
-        gameplay_screen->frames = malloc(gameplay_screen->frame_capacity * sizeof(Frame));
-        setup_new_frame(gameplay_screen);
-        free(screen);
-        return (Screen *)gameplay_screen;
-    }
-    return screen;
-}
-
-void render_select_screen(Screen *screen)
-{
-    SelectScreen *select_screen = (SelectScreen *)screen;
-    ClearBackground(RAYWHITE);
-    DrawText("Select Screen", 20, 20, 40, DARKGRAY);
-    Color colour;
-    for (int i = 0; i < select_screen->num_players; i++)
-    {
-        colour = i == select_screen->current_player ? RED : DARKGRAY;
-        const char *player_text = TextFormat("Player %d: %s", i + 1, select_screen->players[i].type == HUMAN ? "Human" : "AI");
-        DrawText(player_text, 20, 80 + 40 * i, 20, colour);
-    }
-    for (int i = 0; i < select_screen->num_player_modules; i++)
-    {
-        colour = select_screen->selected_module == i ? RED : DARKGRAY;
-        DrawText(select_screen->player_modules[i].name, 220, 80 + 40 * i, 20, colour);
-    }
-}
-
-Screen *update_gameplay_screen(Screen *screen)
-{
-    GameplayScreen *gameplay_screen = (GameplayScreen *)screen;
-    if (IsKeyPressed(KEY_UP))
-    {
-        if (gameplay_screen->game.state == DURING_SHOT)
-        {
-            gameplay_screen->game.playback_speed += 2;
-            gameplay_screen->game.default_playback_speed += 2;
-        }
-    }
-    else if (IsKeyPressed(KEY_DOWN))
-    {
-        if (gameplay_screen->game.state == DURING_SHOT)
-        {
-            gameplay_screen->game.playback_speed -= 2;
-            gameplay_screen->game.default_playback_speed -= 2;
-        }
-    }
-    else if (IsKeyPressed(KEY_R))
-    {
-        update_stats(gameplay_screen);
-    }
-    else if (IsKeyPressed(KEY_ENTER))
-    {
-        if (gameplay_screen->game.state == BEFORE_SHOT)
-        {
-            if (gameplay_screen->game.players[gameplay_screen->game.current_player].type == HUMAN)
-            {
-                take_shot(gameplay_screen);
-                gameplay_screen->game.state = DURING_SHOT;
-                gameplay_screen->game.time = 0;
-                gameplay_screen->game.playback_speed = gameplay_screen->game.default_playback_speed;
-            }
-        }
-        else if (gameplay_screen->game.state == DURING_SHOT)
-        {
-        }
-        else if (gameplay_screen->game.state == AFTER_SHOT)
-        {
-            gameplay_screen->game.state = BEFORE_SHOT;
-        }
-    }
-    if (gameplay_screen->game.state == BEFORE_SHOT)
-    {
-        if (gameplay_screen->game.players[gameplay_screen->game.current_player].type == HUMAN)
-        {
-            int mx, my;
-            Vector2 mouse_position = GetMousePosition();
-            mx = mouse_position.x;
-            my = mouse_position.y;
-            if (mx > 1450 && mx < 1530 && my > 10 && my < 890)
-            {
-                gameplay_screen->game.v = Vector3Scale(Vector3Normalize(gameplay_screen->game.v), 890 - my);
-            }
-            if (mx > 1550 && mx < 1630 && my > 10 && my < 890)
-            {
-                gameplay_screen->game.w = Vector3Scale(Vector3Normalize(gameplay_screen->game.w), 890 - my);
-            }
-            if (mx > 0 && mx < 100 && my > 700 && my < 800)
-            {
-                double v_mag = Vector3Length(gameplay_screen->game.v);
-                gameplay_screen->game.v = Vector3Normalize((Vector3){mx - 50, my - 750, 0});
-                gameplay_screen->game.v = Vector3Scale(gameplay_screen->game.v, v_mag);
-            }
-            if (mx > 0 && mx < 100 && my > 800 && my < 900)
-            {
-                double w_mag = Vector3Length(gameplay_screen->w);
-                gameplay_screen->game.w = Vector3Normalize((Vector3){mx - 50, my - 850, 0});
-                gameplay_screen->game.w = Vector3Scale(gameplay_screen->game.w, w_mag);
-            }
-            // solve_direct_shot(&scene, scene.ball_set.balls[0].initial_position, target_position, v_roll, &required_velocity, &required_angular_velocity);
-            gameplay_screen->game.v = Vector3Subtract((Vector3){mx, my, 0}, gameplay_screen->game.scene.ball_set.balls[0].initial_position);
-            clear_paths(&(gameplay_screen->game.scene));
-            generate_shot(gameplay_screen, gameplay_screen->game.v, gameplay_screen->game.w);
-            gameplay_screen->game.time = 0;
-            gameplay_screen->game.playback_speed = 0;
-        }
-        else if (gameplay_screen->game.players[gameplay_screen->game.current_player].type == AI)
-        {
-            // solve_direct_shot(&(game->scene), game->scene.ball_set.balls[0].initial_position, (Vector3){600, 200, 0}, (Vector3){0, 5, 0}, &(game->v), &(game->w));
-
-            Ball *target_ball = NULL;
-            for (int i = 1; i < gameplay_screen->game.scene.ball_set.num_balls; i++)
-            {
-                Ball *ball = &(gameplay_screen->game.scene.ball_set.balls[i]);
-                if (!ball->pocketed)
-                {
-                    target_ball = ball;
-                    break;
-                }
-            }
-            PlayerPotBallFunction pot_ball_function = gameplay_screen->game.players[gameplay_screen->game.current_player].pot_ball;
-            pot_ball_function(gameplay_screen, target_ball);
-            clear_paths(&(gameplay_screen->game.scene));
-            generate_shot(gameplay_screen, gameplay_screen->game.v, gameplay_screen->game.w);
-            take_shot(gameplay_screen);
-            gameplay_screen->game.time = 0;
-            gameplay_screen->game.playback_speed = gameplay_screen->game.default_playback_speed;
-            gameplay_screen->game.state = DURING_SHOT;
-        }
-    }
-    else if (gameplay_screen->game.state == DURING_SHOT)
-    {
-        gameplay_screen->game.time += gameplay_screen->game.playback_speed / 60;
-        if (gameplay_screen->game.time > gameplay_screen->game.current_frame.shot_history[gameplay_screen->game.current_frame.num_shots - 1].end_time)
-        {
-            gameplay_screen->game.state = AFTER_SHOT;
-        }
-    }
-    else if (gameplay_screen->game.state == AFTER_SHOT)
-    {
-        apply_game_rules(gameplay_screen);
-
-        gameplay_screen->game.state = BEFORE_SHOT;
-        for (int i = 0; i < gameplay_screen->game.scene.ball_set.num_balls; i++)
-        {
-            Ball *ball = &(gameplay_screen->game.scene.ball_set.balls[i]);
-            ball->initial_position = get_ball_position(*ball, gameplay_screen->game.time);
-            ball->path.num_segments = 0;
-        }
-        clear_paths(&(gameplay_screen->game.scene));
-        gameplay_screen->game.time = 0;
-        gameplay_screen->game.playback_speed = 0;
-    }
-}
-
-*/
-Screen *update_app(App *app)
-{
-    return app->current_screen->update(app->current_screen);
-}
-
-void render_app(App *app)
-{
-    BeginDrawing();
-    app->current_screen->render(app->current_screen);
-    EndDrawing();
-}
-
-void init_app(App *app)
-{
-    app->current_screen = create_main_menu_screen();
-}
-
-int main(int argc, char *argv[])
-{
-    const int SCREEN_WIDTH = 1640;
-    const int SCREEN_HEIGHT = 900;
-
-    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Pool");
-
-    SetExitKey(KEY_NULL);
-
-    SetTargetFPS(60);
-    App app;
-    init_app(&app);
-
-    while (!WindowShouldClose())
-    {
-        app.current_screen = update_app(&app);
-        render_app(&app);
-    }
-
-    CloseWindow();
-    return 0;
+    ClearBackground(GREEN);
+    render_scene(game->scene, game->time);
+    render_UI(game, game->v, game->w);
 }

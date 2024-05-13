@@ -1,5 +1,6 @@
 #include "player.h"
 
+char *name = "Basic Ball Potting";
 char *description = "This player finds the first ball that can be potted and calculates the required power to pot it. If no balls can be potted, it hits the cue ball directly at the target ball with a fixed power.";
 
 void pot_ball(Game *game, Ball *ball)

@@ -1,5 +1,6 @@
 #include "player.h"
 
+char *name = "Dummy Player";
 char *description = "This is a dummy player that just hits the cue ball in the same direction every time.";
 
 void pot_ball(Game *game, Ball *ball)
