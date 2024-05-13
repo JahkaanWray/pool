@@ -2,6 +2,7 @@
 #include <raylib.h>
 #include <stdlib.h>
 #include "mainmenuscreen.h"
+#include "pausescreen.h"
 #include "game.h"
 
 Screen *create_gameplay_screen(Player *players, int num_players)
@@ -22,6 +23,10 @@ Screen *update_gameplay_screen(Screen *screen)
     if (IsKeyPressed(KEY_ESCAPE))
     {
         return (Screen *)create_main_menu_screen();
+    }
+    if (IsKeyPressed(KEY_P))
+    {
+        return create_pause_screen(screen);
     }
     return screen;
 }

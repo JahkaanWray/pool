@@ -23,7 +23,7 @@ void load_player_libraries(SelectScreen *select_screen)
         {
             fprintf(stderr, "dlopen failed: %s\n", dlerror());
             free(full_path);
-            return;
+            continue;
         }
         void *pot_ball = dlsym(library, "pot_ball");
         printf("Loading function\n");
@@ -31,7 +31,7 @@ void load_player_libraries(SelectScreen *select_screen)
         {
             fprintf(stderr, "dlsym failed: %s\n", dlerror());
             free(full_path);
-            return;
+            continue;
         }
         char *name = *(char **)dlsym(library, "name");
         printf("Loading name\n");
@@ -39,7 +39,7 @@ void load_player_libraries(SelectScreen *select_screen)
         {
             fprintf(stderr, "dlsym failed: %s\n", dlerror());
             free(full_path);
-            return;
+            continue;
         }
         char *description = *(char **)dlsym(library, "description");
         printf("Loading description\n");
@@ -47,7 +47,7 @@ void load_player_libraries(SelectScreen *select_screen)
         {
             fprintf(stderr, "dlsym failed: %s\n", dlerror());
             free(full_path);
-            return;
+            continue;
         }
         printf("%s\n", description);
         free(full_path);
