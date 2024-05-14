@@ -73,7 +73,7 @@ void pot_ball(Game *game, Ball *ball)
             double cb_speed_impact = ob_speed / dot_product;
             double cb_speed = sqrt(cb_speed_impact * cb_speed_impact + 2 * game->scene.coefficients.mu_slide * game->scene.coefficients.g * aim_distance);
             game->v = Vector3Scale(Vector3Normalize(aim_line), cb_speed);
-            game->w = (Vector3){0, 0, 0};
+            game->w = (Vector3){10, 0, 0};
             return;
         }
 

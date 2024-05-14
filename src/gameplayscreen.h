@@ -8,7 +8,7 @@ typedef struct GameplayScreen
     Game game;
 } GameplayScreen;
 
-Screen *create_gameplay_screen();
+Screen *create_gameplay_screen(Player *players, int num_players);
 
 Screen *update_gameplay_screen(Screen *screen);
 

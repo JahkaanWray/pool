@@ -30,7 +30,6 @@ bool direct_shot(Game *game, Ball *ball)
 {
     for (int i = 0; i < game->scene.table.num_pockets; i++)
     {
-        printf("Checking pocket %d\n", i);
         Ball *cue_ball = &(game->scene.ball_set.balls[0]);
         Vector3 cue_ball_position = game->scene.ball_set.balls[0].initial_position;
         Vector3 pocket = game->scene.table.pockets[i].position;
@@ -38,25 +37,16 @@ bool direct_shot(Game *game, Ball *ball)
         Vector3 aim_line = Vector3Subtract(aim_point, cue_ball_position);
         Vector3 shot_line = Vector3Subtract(pocket, ball->initial_position);
         double dot_product = Vector3DotProduct(Vector3Normalize(aim_line), Vector3Normalize(shot_line));
-        printf("Dot product: %f\n", dot_product);
         bool cuttable = dot_product > 0.8;
         bool object_ball_blocked = line_is_blocked(game, ball->initial_position, pocket, ball);
         bool cue_ball_blocked = line_is_blocked(game, cue_ball_position, aim_point, cue_ball);
 
-        printf("Target ball: %f %f %f\n", ball->initial_position.x, ball->initial_position.y, ball->initial_position.z);
-        printf("Aim point: %f %f %f\n", aim_point.x, aim_point.y, aim_point.z);
-        printf("Aim line: %f %f %f\n", aim_line.x, aim_line.y, aim_line.z);
-        printf("Cuttable: %d\n", cuttable);
-        printf("Object ball blocked: %d\n", object_ball_blocked);
-        printf("Cue ball blocked: %d\n", cue_ball_blocked);
         if (cuttable && !cue_ball_blocked && !object_ball_blocked)
         {
             game->v = Vector3Scale(Vector3Normalize(aim_line), 800);
-            printf("Direct shot\n");
             return true;
         }
     }
-    printf("No direct shot\n");
     return false;
 }
 
@@ -77,7 +67,6 @@ bool bank_shot(Game *game, Ball *ball)
             {
                 continue;
             }
-            printf("Pocket image: %f %f %f\n", pocket_image.x, pocket_image.y, pocket_image.z);
             Vector3 shot_line = Vector3Subtract(pocket_image, ball->initial_position);
             Vector3 collision_point = Vector3Add(ball->initial_position, Vector3Scale(shot_line, (Vector3DotProduct(Vector3Subtract(p1, ball->initial_position), cushion_normal)) / (Vector3DotProduct(shot_line, cushion_normal))));
             Vector3 shot1 = Vector3Subtract(collision_point, ball->initial_position);
@@ -89,16 +78,13 @@ bool bank_shot(Game *game, Ball *ball)
             bool object_ball_blocked1 = line_is_blocked(game, ball->initial_position, collision_point, ball);
             bool object_ball_blocked2 = line_is_blocked(game, collision_point, pocket, ball);
             bool cue_ball_blocked = line_is_blocked(game, cue_ball_position, aim_point, &(game->scene.ball_set.balls[0]));
-            printf("Collision point: %f %f %f\n", collision_point.x, collision_point.y, collision_point.z);
             if (cuttable && !object_ball_blocked1 && !object_ball_blocked2 && !cue_ball_blocked)
             {
                 game->v = Vector3Scale(Vector3Normalize(aim_line), 900);
-                printf("Bank shot\n");
                 return true;
             }
         }
     }
-    printf("No bank shot\n");
     return false;
 }
 
@@ -134,7 +120,6 @@ bool kick_shot(Game *game, Ball *ball)
             if (cuttable && !object_ball_blocked && !cue_ball_blocked1 && !cue_ball_blocked2)
             {
                 game->v = Vector3Scale(Vector3Normalize(aim_line1), 1800);
-                printf("Kick shot\n");
                 return true;
             }
         }

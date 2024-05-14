@@ -25,7 +25,7 @@ void load_player_libraries(SelectScreen *select_screen)
             free(full_path);
             continue;
         }
-        void *pot_ball = dlsym(library, "pot_ball");
+        void *pot_ball = (PlayerPotBallFunction)dlsym(library, "pot_ball");
         printf("Loading function\n");
         if (!pot_ball)
         {

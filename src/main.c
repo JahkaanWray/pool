@@ -39,7 +39,7 @@ void init_app(App *app)
     app->current_screen = create_main_menu_screen();
 }
 
-int main(int argc, char *argv[])
+int main()
 {
     const int SCREEN_WIDTH = 1640;
     const int SCREEN_HEIGHT = 900;

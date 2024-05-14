@@ -1,10 +1,9 @@
 #include "player.h"
-#include <stdio.h>
 #include <raylib.h>
-#include <math.h>
+#include <stdio.h>
 
-char *name = "Plant Player";
-char *description = "This player will try to play a plant/combo shot if no direct or bank shot is available.";
+char *name = "Careful Player";
+char *description = "This player will try not to pot the cue ball.";
 
 bool line_is_blocked(Game *game, Vector3 p1, Vector3 p2, Ball *ball)
 {
@@ -52,15 +51,11 @@ bool direct_shot(Game *game, Ball *ball)
             double factor = ((double)12 / (49 * mu_s * g)) + ((double)25 / (98 * mu_r * g));
             double ob_speed = sqrt(shot_distance / factor);
             double cb_impact_speed = ob_speed / dot_product;
-            printf("dot product: %f\n", dot_product);
             double aim_distance = Vector3Length(aim_line);
             double cb_speed = sqrt(pow(cb_impact_speed, 2) + 2 * g * mu_s * aim_distance);
-            printf("Cue Ball Impact Speed: %f\n", cb_impact_speed);
             double spin = 5 * (cb_speed - cb_impact_speed) / (2 * ball->radius);
             game->v = Vector3Scale(Vector3Normalize(aim_line), cb_speed);
             game->w = Vector3Scale(Vector3Normalize(Vector3CrossProduct(aim_line, (Vector3){0, 0, 1})), spin);
-            printf("Cue Ball Speed: %f\n", cb_speed);
-            printf("Cue Ball Spin: %f\n", spin);
             return true;
         }
     }
@@ -97,8 +92,20 @@ bool bank_shot(Game *game, Ball *ball)
             bool cue_ball_blocked = line_is_blocked(game, cue_ball_position, aim_point, &(game->scene.ball_set.balls[0]));
             if (cuttable && !object_ball_blocked1 && !object_ball_blocked2 && !cue_ball_blocked)
             {
-                game->v = Vector3Scale(Vector3Normalize(aim_line), 900);
-                game->w = Vector3Zero();
+                double shot_distance = Vector3Length(shot_line);
+                double g = game->scene.coefficients.g;
+                double mu_s = game->scene.coefficients.mu_slide;
+                double mu_r = game->scene.coefficients.mu_roll;
+                double factor = ((double)12 / (49 * mu_s * g)) + ((double)25 / (98 * mu_r * g));
+                double ob_speed = sqrt(shot_distance / factor);
+                double dot_product = Vector3DotProduct(Vector3Normalize(aim_line), Vector3Normalize(shot1));
+                double cb_impact_speed = ob_speed / dot_product;
+                double aim_distance = Vector3Length(aim_line);
+                double cb_speed = sqrt(pow(cb_impact_speed, 2) + 2 * g * mu_s * aim_distance);
+                double spin = 5 * (cb_speed - cb_impact_speed) / (2 * ball->radius);
+                game->v = Vector3Scale(Vector3Normalize(aim_line), 2.5 * cb_speed);
+                game->w = Vector3Scale(Vector3Normalize(Vector3CrossProduct(aim_line, (Vector3){0, 0, 1})), spin);
+
                 return true;
             }
         }
@@ -184,8 +191,23 @@ bool combo_shot(Game *game, Ball *ball)
             bool target_ball_blocked = line_is_blocked(game, target_ball->initial_position, pocket, target_ball);
             if (cuttable1 && cuttable2 && !cue_ball_blocked && !object_ball_blocked && !target_ball_blocked)
             {
-                game->v = Vector3Scale(Vector3Normalize(aim_line), 800);
-                game->w = Vector3Zero();
+                double shot_distance2 = Vector3Length(shot_line2);
+                double g = game->scene.coefficients.g;
+                double mu_s = game->scene.coefficients.mu_slide;
+                double mu_r = game->scene.coefficients.mu_roll;
+                double factor = ((double)12 / (49 * mu_s * g)) + ((double)25 / (98 * mu_r * g));
+                double tb_speed = sqrt(shot_distance2 / factor);
+                double dot_product = Vector3DotProduct(Vector3Normalize(shot_line2), Vector3Normalize(shot_line1));
+                double ob_impact_speed = tb_speed / dot_product;
+                double shot_distance1 = Vector3Length(shot_line1);
+                double ob_speed = sqrt(pow(ob_impact_speed, 2) + 2 * g * mu_s * shot_distance1);
+                dot_product = Vector3DotProduct(Vector3Normalize(aim_line), Vector3Normalize(shot_line1));
+                double cb_impact_speed = ob_speed / dot_product;
+                double aim_distance = Vector3Length(aim_line);
+                double cb_speed = sqrt(pow(cb_impact_speed, 2) + 2 * g * mu_s * aim_distance);
+                double spin = 5 * (cb_speed - cb_impact_speed) / (2 * ball->radius);
+                game->v = Vector3Scale(Vector3Normalize(aim_line), cb_speed);
+                game->w = Vector3Scale(Vector3Normalize(Vector3CrossProduct(aim_line, (Vector3){0, 0, 1})), spin);
                 return true;
             }
         }

@@ -120,6 +120,7 @@ void print_path(Path path)
     {
         PathSegment segment = path.segments[i];
         Vector3 acceleration = segment.acceleration;
+        (void)acceleration;
     }
 }
 
@@ -153,7 +154,6 @@ void add_segment(Path *path, PathSegment segment)
 void add_sliding_segment(Ball *ball, Vector3 initial_position, Vector3 initial_velocity, Vector3 initial_angular_velocity, double start_time, Coefficients coefficients)
 {
     double mu_slide = coefficients.mu_slide;
-    double mu_roll = coefficients.mu_roll;
     double g = coefficients.g;
     double R = ball->radius;
     Vector3 contact_point_v = Vector3Subtract(initial_velocity, Vector3CrossProduct(initial_angular_velocity, (Vector3){0, 0, R}));
@@ -191,7 +191,6 @@ bool detect_ball_cushion_collision(Game *game, Ball ball, Cushion *cushion, doub
     PathSegment *segment = &(ball.path.segments[ball.path.num_segments - 1]);
     Vector3 p1 = segment->initial_position;
     Vector3 v1 = segment->initial_velocity;
-    Vector3 w1 = segment->initial_angular_velocity;
     Vector3 line_normal = Vector3Normalize(Vector3CrossProduct(Vector3Subtract(cushion->p2, cushion->p1), (Vector3){0, 0, 1}));
     double sn = Vector3DotProduct(Vector3Subtract(cushion->p1, p1), line_normal);
     double vn = Vector3DotProduct(v1, line_normal);
@@ -337,11 +336,8 @@ bool detect_ball_pocket_collision(Game *game, Ball ball, Pocket pocket, double *
     Vector3 p1 = segment1->initial_position;
     Vector3 p2 = pocket.position;
     Vector3 v1 = segment1->initial_velocity;
-    Vector3 v2 = {0, 0, 0};
     Vector3 a1 = segment1->acceleration;
-    Vector3 a2 = {0, 0, 0};
     double t1 = segment1->start_time;
-    double r1 = ball.radius;
     double r2 = pocket.radius;
 
     if (segment1->rolling)
@@ -496,7 +492,7 @@ void resolve_ball_cushion_collision(Ball *ball, Cushion *cushion, double time, C
 
 void resolve_ball_pocket_collision(Ball *ball, Pocket pocket, double time, Coefficients coefficients)
 {
-    PathSegment *segment = &(ball->path.segments[ball->path.num_segments - 1]);
+    (void)pocket;
     Vector3 p;
     if (ball->id == 0)
     {
@@ -523,7 +519,6 @@ void resolve_stop(Ball *ball, double time)
 {
     PathSegment *segment = &(ball->path.segments[ball->path.num_segments - 1]);
     Vector3 p = get_position(*segment, segment->end_time);
-    Vector3 v = get_velocity(*segment, segment->end_time);
     PathSegment stop_segment = {p, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, false, time, INFINITY};
     add_segment(&(ball->path), stop_segment);
 }
@@ -585,9 +580,6 @@ bool update_path(Game *game)
             }
         }
     }
-    double mu_slide = game->scene.coefficients.mu_slide;
-    double mu_roll = game->scene.coefficients.mu_roll;
-    double g = game->scene.coefficients.g;
 
     for (int i = 0; i < game->scene.ball_set.num_balls; i++)
     {
@@ -655,7 +647,6 @@ void generate_paths(Game *game, Ball *ball, Vector3 initial_position, Vector3 in
         add_segment(&(current_ball->path), segment);
     }
     double mu_slide = game->scene.coefficients.mu_slide;
-    double mu_roll = game->scene.coefficients.mu_roll;
     double g = game->scene.coefficients.g;
     double R = ball->radius;
     double end_time;
@@ -752,8 +743,9 @@ void solve_direct_shot(Scene *scene, Vector3 initial_position, Vector3 target_po
 
 void solve_one_cushion_shot(Scene *scene, Vector3 initial_position, Vector3 target_position, Vector3 v_roll, Cushion cushion, Vector3 *v, Vector3 *w)
 {
+    (void)v;
+    (void)w;
     double mu_slide = scene->coefficients.mu_slide;
-    double mu_roll = scene->coefficients.mu_roll;
     double g = scene->coefficients.g;
     double R = scene->ball_set.balls[0].radius;
 
@@ -776,26 +768,6 @@ void solve_one_cushion_shot(Scene *scene, Vector3 initial_position, Vector3 targ
         solve_quadratic(0.5 * acceleration.y, -v_contact_point.y, cushion_contact_point.y - initial_position.y, &x3, &x4);
         cushion_coord += 10;
     }
-}
-
-Table new_table()
-{
-    Table table;
-    table.cushions = malloc(4 * sizeof(Cushion));
-    table.num_cushions = 4;
-    table.cushion_capacity = 4;
-    table.cushions[0] = (Cushion){{100, 100, 0}, {800, 100, 0}};
-    table.cushions[1] = (Cushion){{800, 100, 0}, {800, 800, 0}};
-    table.cushions[2] = (Cushion){{800, 800, 0}, {100, 800, 0}};
-    table.cushions[3] = (Cushion){{100, 800, 0}, {100, 100, 0}};
-    table.num_pockets = 4;
-    table.pockets = malloc(table.num_pockets * sizeof(Pocket));
-    table.pocket_capacity = table.num_pockets;
-    table.pockets[0] = (Pocket){100, 100, 0, 20};
-    table.pockets[1] = (Pocket){800, 100, 0, 20};
-    table.pockets[2] = (Pocket){800, 800, 0, 20};
-    table.pockets[3] = (Pocket){100, 800, 0, 20};
-    return table;
 }
 
 void render_table(Table table)
@@ -915,10 +887,10 @@ Table create_table()
     table.num_pockets = 4;
     table.pockets = malloc(table.num_pockets * sizeof(Pocket));
     table.pocket_capacity = table.num_pockets;
-    table.pockets[0] = (Pocket){100, 100, 0, 20};
-    table.pockets[1] = (Pocket){800, 100, 0, 20};
-    table.pockets[2] = (Pocket){800, 800, 0, 20};
-    table.pockets[3] = (Pocket){100, 800, 0, 20};
+    table.pockets[0] = (Pocket){{100, 100, 0}, 20};
+    table.pockets[1] = (Pocket){{800, 100, 0}, 20};
+    table.pockets[2] = (Pocket){{800, 800, 0}, 20};
+    table.pockets[3] = (Pocket){{100, 800, 0}, 20};
     return table;
 }
 Scene create_scene()
@@ -964,16 +936,23 @@ void setup_new_frame(Game *game)
 }
 bool apply_game_rules(Game *game)
 {
+    Frame *current_frame = &(game->frames[game->num_frames - 1]);
+    if (current_frame->num_shots >= 200)
+    {
+        current_frame->winner = &(game->players[(game->current_player + 1) % game->num_players]);
+        game->consecutive_fouls = 0;
+        setup_new_frame(game);
+        return false;
+    }
     if (game->consecutive_fouls >= 3)
     {
-        game->frames[game->num_frames - 1].winner = &(game->players[(game->current_player + 1) % game->num_players]);
+        current_frame->winner = &(game->players[(game->current_player + 1) % game->num_players]);
         game->consecutive_fouls = 0;
         setup_new_frame(game);
         return false;
     }
     Ball *cue_ball = &(game->scene.ball_set.balls[0]);
     Ball *target_ball = NULL;
-    Ball *nine_ball = &(game->scene.ball_set.balls[9]);
     for (int i = 1; i < game->scene.ball_set.num_balls; i++)
     {
         Ball *ball = &(game->scene.ball_set.balls[i]);
@@ -997,7 +976,7 @@ bool apply_game_rules(Game *game)
     for (int i = 0; i < last_shot.num_events; i++)
     {
         ShotEvent event = last_shot.events[i];
-        if (event.type == BALL_BALL_COLLISION && (event.ball1->id == 0 && event.ball2->id == target_ball->id || event.ball1->id == target_ball->id && event.ball2->id == 0))
+        if (event.type == BALL_BALL_COLLISION && ((event.ball1->id == 0 && event.ball2->id == target_ball->id) || (event.ball1->id == target_ball->id && event.ball2->id == 0)))
         {
             legal_first_hit = true;
             break;
@@ -1023,7 +1002,6 @@ bool apply_game_rules(Game *game)
     cue_ball->pocketed = false;
     if (nine_ball_potted)
     {
-        Frame *current_frame = &(game->frames[game->num_frames - 1]);
         if (!legal_first_hit || cue_ball_potted)
         {
             current_frame->winner = &(game->players[(game->current_player + 1) % game->num_players]);
@@ -1136,6 +1114,7 @@ Game *create_game(Player *players, int num_players)
 
     game->p1_stats = (Stats){0, 0, 0};
     game->p2_stats = (Stats){0, 0, 0};
+    return game;
 }
 
 void update_game(Game *game)

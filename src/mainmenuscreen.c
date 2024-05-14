@@ -25,6 +25,7 @@ Screen *update_main_menu_screen(Screen *screen)
 
 void render_main_menu_screen(Screen *screen)
 {
+    (void)screen;
     ClearBackground(RAYWHITE);
     DrawText("Main Menu", 190, 200, 20, DARKGRAY);
     DrawText("Press Enter to start", 180, 220, 20, DARKGRAY);

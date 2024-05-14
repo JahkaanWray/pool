@@ -2,6 +2,7 @@
 #include "game.h"
 #include <stdio.h>
 #include <dlfcn.h>
+#include <time.h>
 
 int main(int argc, char *argv[])
 {
@@ -85,12 +86,68 @@ int main(int argc, char *argv[])
     }
     players[1].module.pot_ball = pot_ball;
 
-    Game *game = create_game(players, 2);
+    SetRandomSeed(time(NULL));
 
-    while (game->num_frames < 100)
+    Game *game = create_game(players, 2);
+    game->playback_speed = 10000;
+    game->default_playback_speed = 10000;
+
+    while (game->num_frames < 1000)
     {
+        printf("Frame %d\n", game->num_frames + 1);
         update_game(game);
-        printf("Frame: %d\n", game->num_frames);
+    }
+
+    Frame *frames = game->frames;
+    int p1 = 0;
+    int p2 = 0;
+    int shots = 0;
+    int longest = 0;
+    int longest_frame = 0;
+    int shortest = 1000;
+    int shortest_frame = 0;
+    int freqs[20] = {0};
+    for (int i = 0; i < game->num_frames; i++)
+    {
+        if (frames[i].winner == &(game->players[0]))
+        {
+            p1++;
+        }
+        else
+        {
+            p2++;
+        }
+
+        shots += frames[i].num_shots;
+        if (frames[i].num_shots > longest)
+        {
+            longest = frames[i].num_shots;
+            longest_frame = i;
+        }
+        if (frames[i].num_shots < shortest && frames[i].num_shots > 0)
+        {
+            shortest = frames[i].num_shots;
+            shortest_frame = i;
+        }
+        if (frames[i].num_shots < 20)
+        {
+            freqs[frames[i].num_shots]++;
+        }
+        else
+        {
+            freqs[19]++;
+        }
+    }
+
+    printf("%s: %d\n", players[0].module.name, p1);
+    printf("%s: %d\n", players[1].module.name, p2);
+    printf("Average shots per frame: %f\n", (float)shots / game->num_frames);
+    printf("Longest frame: frame %d, %d shots\n", longest_frame, longest);
+    printf("Shortest frame: frame %d, %d shots\n", shortest_frame, shortest);
+    printf("Frequency of frames with n shots:\n");
+    for (int i = 0; i < 20; i++)
+    {
+        printf("%d: %d\n", i, freqs[i]);
     }
     return 0;
 }

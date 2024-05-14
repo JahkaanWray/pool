@@ -9,22 +9,30 @@
 
 void reload_player_modules(Game *game)
 {
+    printf("Reloading player modules\n");
     for (int i = 0; i < game->num_players; i++)
     {
+        printf("Reloading player %d\n", i);
         Player *player = &game->players[i];
         if (player->module.handle != NULL)
         {
+            printf("Closing handle\n");
             dlclose(player->module.handle);
         }
         void *library = dlopen(player->module.library_path, RTLD_LAZY);
+        printf("Loading library: %s\n", player->module.library_path);
         if (library == NULL)
         {
             fprintf(stderr, "dlopen failed: %s\n", dlerror());
             continue;
         }
         player->module.handle = library;
-        player->module.pot_ball = dlsym(player->module.handle, "pot_ball");
-        if (!player->module.pot_ball)
+        void *pot_ball = dlsym(player->module.handle, "pot_ball");
+        player->module.pot_ball = (PlayerPotBallFunction)pot_ball;
+
+        printf("Loading function\n");
+        printf("%p\n", pot_ball);
+        if (pot_ball == NULL)
         {
             fprintf(stderr, "dlsym failed: %s\n", dlerror());
             continue;
