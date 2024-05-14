@@ -58,8 +58,8 @@ void pot_ball(Game *game, Ball *ball)
             Vector3 p_object = current_ball->initial_position;
             Vector3 aim_tangent = Vector3Normalize(aim_line);
             Vector3 aim_normal = Vector3CrossProduct(aim_tangent, (Vector3){0, 0, 1});
-            double d_normal = Vector3DotProduct(Vector3Subtract(current_ball->initial_position, p_cue), aim_normal);
-            double d_tangent = Vector3DotProduct(Vector3Subtract(current_ball->initial_position, p_cue), aim_tangent);
+            double d_normal = Vector3DotProduct(Vector3Subtract(p_object, p_cue), aim_normal);
+            double d_tangent = Vector3DotProduct(Vector3Subtract(p_object, p_cue), aim_tangent);
             if (fabs(d_normal) < 2 * target_ball->radius && d_tangent > 0 && d_tangent < aim_distance)
             {
                 cue_ball_blocked = true;

@@ -82,6 +82,7 @@ bool bank_shot(Game *game, Ball *ball)
             Vector3 collision_point = Vector3Add(ball->initial_position, Vector3Scale(shot_line, (Vector3DotProduct(Vector3Subtract(p1, ball->initial_position), cushion_normal)) / (Vector3DotProduct(shot_line, cushion_normal))));
             Vector3 shot1 = Vector3Subtract(collision_point, ball->initial_position);
             Vector3 shot2 = Vector3Subtract(pocket_image, collision_point);
+            (void)shot2;
             Vector3 aim_point = Vector3Subtract(ball->initial_position, Vector3Scale(Vector3Normalize(shot1), 2 * ball->radius));
             Vector3 aim_line = Vector3Subtract(aim_point, cue_ball_position);
             bool cuttable = Vector3DotProduct(Vector3Normalize(shot1), Vector3Normalize(aim_line)) > 0.8;
