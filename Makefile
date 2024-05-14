@@ -7,7 +7,7 @@ PLAYER_MODULES = ./player_modules
 PLAYER_CODE_DIR = ./player_code
 
 PLAYER_SRC = $(wildcard $(PLAYER_CODE_DIR)/*.c)
-PLAYER_OBJS = $(patsubst $(PLAYER_CODE_DIR)/%.c, $(PLAYER_MODULES)/%.so, $(PLAYER_SRC))
+PLAYER_OBJS = $(patsubst $(PLAYER_CODE_DIR)/%.c, $(PLAYER_MODULES)/lib%.so, $(PLAYER_SRC))
 
 all: main $(PLAYER_OBJS)
 
@@ -35,7 +35,7 @@ main: src/main.c vector poly $(PLAYER_OBJS) mainmenuscreen selectscreen gameplay
 main2: src/main2.c
 	gcc -o main2 src/main2.c -lraylib -lm -g
 
-$(PLAYER_MODULES)/%.so: $(PLAYER_CODE_DIR)/%.c
+$(PLAYER_MODULES)/lib%.so: $(PLAYER_CODE_DIR)/%.c
 	$(CC) $(CFLAGS) $(SHARED) -o $@ $< $(LDFLAGS)
 
 playerbankkick: src/playerbankkick.c
