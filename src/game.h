@@ -140,6 +140,13 @@ typedef struct
     int num_fouls;
 } Stats;
 
+typedef enum
+{
+    POT,
+    MISS,
+    FOUL
+} ShotType;
+
 typedef struct Game
 {
     Scene scene;
@@ -154,6 +161,8 @@ typedef struct Game
     int frame_capacity;
 
     GameState state;
+
+    int consecutive_fouls;
 
     double time;
     double playback_speed;

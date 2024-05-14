@@ -11,6 +11,9 @@ PLAYER_OBJS = $(patsubst $(PLAYER_CODE_DIR)/%.c, $(PLAYER_MODULES)/lib%.so, $(PL
 
 all: main $(PLAYER_OBJS)
 
+compare: src/compare.c
+	$(CC) -o compare src/compare.c game.o polynomial.o -lm -lraylib -g
+
 vector: src/vector3.c
 	gcc -c src/vector3.c -lm -lraylib -g
 

@@ -964,6 +964,13 @@ void setup_new_frame(Game *game)
 }
 bool apply_game_rules(Game *game)
 {
+    if (game->consecutive_fouls >= 3)
+    {
+        game->frames[game->num_frames - 1].winner = &(game->players[(game->current_player + 1) % game->num_players]);
+        game->consecutive_fouls = 0;
+        setup_new_frame(game);
+        return false;
+    }
     Ball *cue_ball = &(game->scene.ball_set.balls[0]);
     Ball *target_ball = NULL;
     Ball *nine_ball = &(game->scene.ball_set.balls[9]);
@@ -979,6 +986,7 @@ bool apply_game_rules(Game *game)
     if (target_ball == NULL)
     {
         game->current_player = (game->current_player + 1) % game->num_players;
+        game->consecutive_fouls++;
         return false;
     }
     Shot last_shot = game->frames[game->num_frames - 1].shot_history[game->frames[game->num_frames - 1].num_shots - 1];
@@ -1024,9 +1032,16 @@ bool apply_game_rules(Game *game)
         {
             current_frame->winner = &(game->players[game->current_player]);
         }
+        game->consecutive_fouls = 0;
         setup_new_frame(game);
     }
-    if (!legal_first_hit || !ball_potted)
+    if (!legal_first_hit)
+    {
+        game->current_player = (game->current_player + 1) % game->num_players;
+        game->consecutive_fouls++;
+        return false;
+    }
+    if (!ball_potted)
     {
         game->current_player = (game->current_player + 1) % game->num_players;
         return false;
@@ -1034,8 +1049,10 @@ bool apply_game_rules(Game *game)
     if (legal_first_hit && cue_ball_potted)
     {
         game->current_player = (game->current_player + 1) % game->num_players;
+        game->consecutive_fouls++;
         return false;
     }
+    game->consecutive_fouls = 0;
     return legal_first_hit && ball_potted;
 }
 
@@ -1109,6 +1126,7 @@ Game *create_game(Player *players, int num_players)
     game->current_shot = shot;
 
     game->state = BEFORE_SHOT;
+    game->consecutive_fouls = 0;
     game->time = 0;
     game->playback_speed = 1;
     game->default_playback_speed = 1;
