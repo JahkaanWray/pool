@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -g -Wall -Wextra 
 LDFLAGS = -lm -lraylib -ldl
-SHARED = -shared
+SHARED = -shared -fPIC
 
 PLAYER_MODULES = ./player_modules
 PLAYER_CODE_DIR = ./player_code
