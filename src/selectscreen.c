@@ -50,12 +50,13 @@ void load_player_libraries(SelectScreen *select_screen)
             continue;
         }
         printf("%s\n", description);
-        free(full_path);
 
         PlayerModule player_module = {
             .name = name,
             .description = description,
-            .pot_ball = pot_ball};
+            .pot_ball = pot_ball,
+            .handle = library,
+            .library_path = full_path};
 
         select_screen->player_modules[select_screen->num_player_modules++] = player_module;
     }

@@ -1,9 +1,36 @@
 #include "gameplayscreen.h"
 #include <raylib.h>
 #include <stdlib.h>
+#include <dlfcn.h>
+#include <stdio.h>
 #include "mainmenuscreen.h"
 #include "pausescreen.h"
 #include "game.h"
+
+void reload_player_modules(Game *game)
+{
+    for (int i = 0; i < game->num_players; i++)
+    {
+        Player *player = &game->players[i];
+        if (player->module.handle != NULL)
+        {
+            dlclose(player->module.handle);
+        }
+        void *library = dlopen(player->module.library_path, RTLD_LAZY);
+        if (library == NULL)
+        {
+            fprintf(stderr, "dlopen failed: %s\n", dlerror());
+            continue;
+        }
+        player->module.handle = library;
+        player->module.pot_ball = dlsym(player->module.handle, "pot_ball");
+        if (!player->module.pot_ball)
+        {
+            fprintf(stderr, "dlsym failed: %s\n", dlerror());
+            continue;
+        }
+    }
+}
 
 Screen *create_gameplay_screen(Player *players, int num_players)
 {
@@ -27,6 +54,10 @@ Screen *update_gameplay_screen(Screen *screen)
     if (IsKeyPressed(KEY_P))
     {
         return create_pause_screen(screen);
+    }
+    if (IsKeyPressed(KEY_R))
+    {
+        reload_player_modules(&gameplay_screen->game);
     }
     return screen;
 }

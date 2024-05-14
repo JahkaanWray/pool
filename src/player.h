@@ -21,6 +21,8 @@ typedef struct
     char *name;
     char *description;
     PlayerPotBallFunction pot_ball;
+    void *handle;
+    char *library_path;
 } PlayerModule;
 
 typedef struct Player
