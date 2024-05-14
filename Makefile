@@ -1,4 +1,15 @@
-all: main polytest
+CC = gcc
+CFLAGS = -g -Wall -Wextra 
+LDFLAGS = -lm -lraylib -ldl
+SHARED = -shared
+
+PLAYER_MODULES = ./player_modules
+PLAYER_CODE_DIR = ./player_code
+
+PLAYER_SRC = $(wildcard $(PLAYER_CODE_DIR)/*.c)
+PLAYER_OBJS = $(patsubst $(PLAYER_CODE_DIR)/%.c, $(PLAYER_MODULES)/%.so, $(PLAYER_SRC))
+
+all: main $(PLAYER_OBJS)
 
 vector: src/vector3.c
 	gcc -c src/vector3.c -lm -lraylib -g
@@ -18,26 +29,14 @@ gameplayscreen: src/gameplayscreen.c
 pausescreen: src/pausescreen.c
 	gcc -c src/pausescreen.c -lraylib -lm -g
 
-main: src/main.c vector poly player1 player2 player3 player4 playerbankshot playerbankkick mainmenuscreen selectscreen gameplayscreen pausescreen game
+main: src/main.c vector poly $(PLAYER_OBJS) mainmenuscreen selectscreen gameplayscreen pausescreen game
 	gcc -o main src/main.c vector3.o polynomial.o mainmenuscreen.o selectscreen.o gameplayscreen.o pausescreen.o game.o -lm -lraylib -lSDL2 -ldl -g
 
 main2: src/main2.c
 	gcc -o main2 src/main2.c -lraylib -lm -g
 
-player1: src/player1.c
-	gcc -shared -o ./player_modules/libplayer1.so src/player1.c -lm -lraylib -g
-
-player2: src/player2.c
-	gcc -shared -o ./player_modules/libplayer2.so src/player2.c -lm -lraylib -g
-
-player3: src/player3.c
-	gcc -shared -o ./player_modules/libplayer3.so src/player3.c -lm -lraylib -g
-
-player4: src/player4.c
-	gcc -shared -o ./player_modules/libplayer4.so src/player4.c -lm -lraylib -g
-
-playerbankshot: src/playerbankshot.c
-	gcc -shared -o ./player_modules/libplayerbankshot.so src/playerbankshot.c -lm -lraylib -g
+$(PLAYER_MODULES)/%.so: $(PLAYER_CODE_DIR)/%.c
+	$(CC) $(CFLAGS) $(SHARED) -o $@ $< $(LDFLAGS)
 
 playerbankkick: src/playerbankkick.c
 	gcc -shared -o ./player_modules/libplayerbankkick.so src/playerbankkick.c -lm -lraylib -g
