@@ -6,6 +6,12 @@
 #include "mainmenuscreen.h"
 #include "pausescreen.h"
 #include "game.h"
+#include "serialise.h"
+
+void save_game(Game *game, char *filename)
+{
+    serialise_game(game);
+}
 
 void reload_player_modules(Game *game)
 {
@@ -66,6 +72,10 @@ Screen *update_gameplay_screen(Screen *screen)
     if (IsKeyPressed(KEY_R))
     {
         reload_player_modules(&gameplay_screen->game);
+    }
+    if (IsKeyPressed(KEY_S))
+    {
+        save_game(&gameplay_screen->game, "game.dat");
     }
     return screen;
 }

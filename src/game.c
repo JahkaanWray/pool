@@ -1042,8 +1042,15 @@ void generate_shot(Game *game, Vector3 velocity, Vector3 angular_velocity)
     double end_time = 0;
     for (int i = 0; i < game->scene.ball_set.num_balls; i++)
     {
-        game->current_shot.ball_paths[i] = game->scene.ball_set.balls[i].path;
         Path path = game->scene.ball_set.balls[i].path;
+        game->current_shot.ball_paths[i] = game->scene.ball_set.balls[i].path;
+        game->current_shot.ball_paths[i].num_segments = path.num_segments;
+        game->current_shot.ball_paths[i].segments = malloc(path.num_segments * sizeof(PathSegment));
+        game->current_shot.ball_paths[i].capacity = path.num_segments;
+        for (int j = 0; j < path.num_segments; j++)
+        {
+            game->current_shot.ball_paths[i].segments[j] = path.segments[j];
+        }
         PathSegment last_segment = path.segments[path.num_segments - 1];
         if (last_segment.start_time > end_time)
         {
@@ -1070,9 +1077,9 @@ void take_shot(Game *game)
         current_frame->shot_capacity *= 2;
         current_frame->shot_history = realloc(current_frame->shot_history, current_frame->shot_capacity * sizeof(Shot));
     }
+    current_shot.player = &(game->players[game->current_player]);
     current_frame->shot_history[current_frame->num_shots++] = current_shot;
     Shot shot;
-    shot.player = &(game->players[game->current_player]);
     shot.ball_paths = malloc(game->scene.ball_set.num_balls * sizeof(Path));
     shot.events = malloc(10 * sizeof(ShotEvent));
     shot.num_events = 0;
