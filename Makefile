@@ -9,7 +9,7 @@ PLAYER_CODE_DIR = ./player_code
 PLAYER_SRC = $(wildcard $(PLAYER_CODE_DIR)/*.c)
 PLAYER_OBJS = $(patsubst $(PLAYER_CODE_DIR)/%.c, $(PLAYER_MODULES)/lib%.so, $(PLAYER_SRC))
 
-all: main $(PLAYER_OBJS)
+all: main $(PLAYER_OBJS) compare
 
 serialise.o: src/serialise.c
 	$(CC) -c src/serialise.c -lm $(CFLAGS)
@@ -41,7 +41,7 @@ gameplayscreen.o: src/gameplayscreen.c
 pausescreen.o: src/pausescreen.c
 	gcc -c src/pausescreen.c -lraylib -lm $(CFLAGS)
 
-main: src/main.c vector3.o polynomial.o $(PLAYER_OBJS) mainmenuscreen.o selectscreen.o selectalgoscreen.o algoscreen.o gameplayscreen.o pausescreen.o game.o serialise.o
+main: src/main.c vector3.o polynomial.o  mainmenuscreen.o selectscreen.o selectalgoscreen.o algoscreen.o gameplayscreen.o pausescreen.o game.o serialise.o
 	gcc -o main src/main.c vector3.o polynomial.o mainmenuscreen.o selectscreen.o selectalgoscreen.o algoscreen.o gameplayscreen.o pausescreen.o serialise.o game.o -lm -lraylib -lSDL2 -ldl $(CFLAGS)
 
 main2: src/main2.c
@@ -59,5 +59,7 @@ polytest: src/polynomialtest.c polynomial.o
 clean:
 	rm -f main
 	rm -f main2
+	rm -f compare
+	rm -f polytest
 	rm -f *.o *.so
 	rm -f $(PLAYER_MODULES)/*.so

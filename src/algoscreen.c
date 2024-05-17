@@ -1,5 +1,6 @@
 #include "algoscreen.h"
 #include <raylib.h>
+#include <stdlib.h>
 
 Screen *create_algorithm_screen(Game *game)
 {

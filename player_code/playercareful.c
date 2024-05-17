@@ -217,6 +217,8 @@ bool combo_shot(Game *game, Ball *ball)
 
 void pot_ball(Game *game, Ball *ball)
 {
+    game->v = Vector3Zero();
+    return;
     if (direct_shot(game, ball) || combo_shot(game, ball) || bank_shot(game, ball) || kick_shot(game, ball))
     {
         return;

@@ -4,12 +4,13 @@
 #include <stdio.h>
 #include <dirent.h>
 #include <raylib.h>
+#include <stdlib.h>
 
 Screen *update_select_algo_screen(Screen *screen)
 {
     if (IsKeyPressed(KEY_ENTER))
     {
-        const char *library_path = "./player_modules/libplayerplant.so";
+        const char *library_path = "./player_modules/libplayerposition.so";
         void *handle = dlopen(library_path, RTLD_LAZY);
         if (handle == NULL)
         {
