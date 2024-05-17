@@ -183,4 +183,8 @@ void render_game(Game *game);
 
 Scene create_scene();
 
+void generate_shot(Game *game, Vector3 v, Vector3 w);
+
+void clear_paths(Scene *scene);
+
 #endif // GAME_H

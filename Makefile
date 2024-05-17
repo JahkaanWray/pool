@@ -29,14 +29,20 @@ mainmenuscreen: src/mainmenuscreen.c
 selectscreen: src/selectscreen.c
 	gcc -c src/selectscreen.c -lraylib -lm $(CFLAGS)
 
+selectalgoscreen: src/selectalgoscreen.c
+	gcc -c src/selectalgoscreen.c -lraylib -lm $(CFLAGS)
+
+algoscreen: src/algoscreen.c
+	gcc -c src/algoscreen.c -lraylib -lm $(CFLAGS)
+
 gameplayscreen: src/gameplayscreen.c
 	gcc -c src/gameplayscreen.c -lraylib -lm $(CFLAGS)
 
 pausescreen: src/pausescreen.c
 	gcc -c src/pausescreen.c -lraylib -lm $(CFLAGS)
 
-main: src/main.c vector poly $(PLAYER_OBJS) mainmenuscreen selectscreen gameplayscreen pausescreen game serialise
-	gcc -o main src/main.c vector3.o polynomial.o mainmenuscreen.o selectscreen.o gameplayscreen.o pausescreen.o serialise.o game.o -lm -lraylib -lSDL2 -ldl $(CFLAGS)
+main: src/main.c vector poly $(PLAYER_OBJS) mainmenuscreen selectscreen selectalgoscreen algoscreen gameplayscreen pausescreen game serialise
+	gcc -o main src/main.c vector3.o polynomial.o mainmenuscreen.o selectscreen.o selectalgoscreen.o algoscreen.o gameplayscreen.o pausescreen.o serialise.o game.o -lm -lraylib -lSDL2 -ldl $(CFLAGS)
 
 main2: src/main2.c
 	gcc -o main2 src/main2.c -lraylib -lm $(CFLAGS)
