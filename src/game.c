@@ -1142,6 +1142,20 @@ void update_game(Game *game)
             game->default_playback_speed -= 2;
         }
     }
+    else if (IsKeyPressed(KEY_SPACE))
+    {
+        if (game->state == DURING_SHOT)
+        {
+            if (game->playback_speed == 0)
+            {
+                game->playback_speed = game->default_playback_speed;
+            }
+            else
+            {
+                game->playback_speed = 0;
+            }
+        }
+    }
     else if (IsKeyPressed(KEY_R))
     {
         update_stats(game);
