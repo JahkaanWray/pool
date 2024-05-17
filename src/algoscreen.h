@@ -5,6 +5,7 @@ typedef struct AlgorithmScreen
 {
     Screen base;
     Game *game;
+    int current_ball;
 } AlgorithmScreen;
 
 Screen *create_algorithm_screen(Game *game);

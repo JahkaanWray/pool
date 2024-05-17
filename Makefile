@@ -42,7 +42,7 @@ pausescreen.o: src/pausescreen.c
 	gcc -c src/pausescreen.c -lraylib -lm $(CFLAGS)
 
 main: src/main.c vector3.o polynomial.o  mainmenuscreen.o selectscreen.o selectalgoscreen.o algoscreen.o gameplayscreen.o pausescreen.o game.o serialise.o
-	gcc -o main src/main.c vector3.o polynomial.o mainmenuscreen.o selectscreen.o selectalgoscreen.o algoscreen.o gameplayscreen.o pausescreen.o serialise.o game.o -lm -lraylib -lSDL2 -ldl $(CFLAGS)
+	gcc -o main src/main.c vector3.o polynomial.o mainmenuscreen.o selectscreen.o selectalgoscreen.o algoscreen.o gameplayscreen.o pausescreen.o serialise.o game.o -lm -lraylib $(CFLAGS)
 
 main2: src/main2.c
 	gcc -o main2 src/main2.c -lraylib -lm $(CFLAGS)
