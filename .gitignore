@@ -1,5 +1,10 @@
 *.o
 *.so
 *.a
+*.bin
 
 main
+main2
+compare
+polytest
+logs.txt
