@@ -63,6 +63,14 @@ Screen *update_gameplay_screen(Screen *screen)
     update_game(&gameplay_screen->game);
     if (IsKeyPressed(KEY_ESCAPE))
     {
+        for (int i = 0; i < gameplay_screen->game.num_players; i++)
+        {
+            if (gameplay_screen->game.players[i].module.handle != NULL)
+            {
+                dlclose(gameplay_screen->game.players[i].module.handle);
+            }
+        }
+        free(screen);
         return (Screen *)create_main_menu_screen();
     }
     if (IsKeyPressed(KEY_P))
