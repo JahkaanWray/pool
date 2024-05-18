@@ -1,5 +1,5 @@
 #include "player.h"
 
-void load_library_paths(char **paths, int *num_paths);
+char **load_library_paths(const char *directory_path, int *num_paths);
 
-void load_player_modules(char **paths, int num_paths, PlayerModule *player_modules, int *num_player_modules);
+PlayerModule *load_player_modules(char **paths, int num_paths, int *num_player_modules);

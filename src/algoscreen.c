@@ -1,5 +1,6 @@
 #include "mainmenuscreen.h"
 #include "algoscreen.h"
+#include "dlfcn.h"
 #include <raylib.h>
 #include <stdlib.h>
 
@@ -20,6 +21,13 @@ Screen *update_algorithm_screen(Screen *screen)
     if (IsKeyPressed(KEY_ESCAPE))
     {
         clear_paths(&algo_screen->game->scene);
+        for (int i = 0; i < algo_screen->game->num_players; i++)
+        {
+            if (algo_screen->game->players[i].module.handle != NULL)
+            {
+                dlclose(algo_screen->game->players[i].module.handle);
+            }
+        }
         free(screen);
         return (Screen *)create_main_menu_screen();
     }

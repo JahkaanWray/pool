@@ -11,6 +11,9 @@ PLAYER_OBJS = $(patsubst $(PLAYER_CODE_DIR)/%.c, $(PLAYER_MODULES)/lib%.so, $(PL
 
 all: main $(PLAYER_OBJS) compare
 
+dl.o: src/dl.c
+	$(CC) -c src/dl.c -lm $(CFLAGS)
+
 serialise.o: src/serialise.c
 	$(CC) -c src/serialise.c -lm $(CFLAGS)
 
@@ -41,8 +44,8 @@ gameplayscreen.o: src/gameplayscreen.c
 pausescreen.o: src/pausescreen.c
 	gcc -c src/pausescreen.c -lraylib -lm $(CFLAGS)
 
-main: src/main.c vector3.o polynomial.o  mainmenuscreen.o selectscreen.o selectalgoscreen.o algoscreen.o gameplayscreen.o pausescreen.o game.o serialise.o
-	gcc -o main src/main.c vector3.o polynomial.o mainmenuscreen.o selectscreen.o selectalgoscreen.o algoscreen.o gameplayscreen.o pausescreen.o serialise.o game.o -lm -lraylib $(CFLAGS)
+main: src/main.c vector3.o polynomial.o  mainmenuscreen.o selectscreen.o selectalgoscreen.o algoscreen.o gameplayscreen.o pausescreen.o game.o serialise.o dl.o
+	gcc -o main src/main.c vector3.o polynomial.o mainmenuscreen.o selectscreen.o selectalgoscreen.o algoscreen.o gameplayscreen.o pausescreen.o serialise.o game.o dl.o -lm -lraylib $(CFLAGS)
 
 main2: src/main2.c
 	gcc -o main2 src/main2.c -lraylib -lm $(CFLAGS)

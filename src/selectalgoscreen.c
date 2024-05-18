@@ -1,5 +1,6 @@
 #include "selectalgoscreen.h"
 #include "algoscreen.h"
+#include "dl.h"
 #include <dlfcn.h>
 #include <stdio.h>
 #include <dirent.h>
@@ -8,40 +9,19 @@
 
 Screen *update_select_algo_screen(Screen *screen)
 {
+    SelectAlgoScreen *select_algo_screen = (SelectAlgoScreen *)screen;
+    if (IsKeyPressed(KEY_DOWN))
+    {
+        select_algo_screen->selected_module = (select_algo_screen->selected_module + 1) % select_algo_screen->num_player_modules;
+    }
+    if (IsKeyPressed(KEY_UP))
+    {
+        select_algo_screen->selected_module = (select_algo_screen->selected_module - 1 + select_algo_screen->num_player_modules) % select_algo_screen->num_player_modules;
+    }
     if (IsKeyPressed(KEY_ENTER))
     {
-        const char *library_path = "./player_modules/libplayerposition.so";
-        void *handle = dlopen(library_path, RTLD_LAZY);
-        if (handle == NULL)
-        {
-            fprintf(stderr, "Error loading library: %s\n", dlerror());
-            exit(1);
-        }
-        char *name = *(char **)dlsym(handle, "name");
-        if (name == NULL)
-        {
-            fprintf(stderr, "Error loading name: %s\n", dlerror());
-            exit(1);
-        }
-        char *description = *(char **)dlsym(handle, "description");
-        if (description == NULL)
-        {
-            fprintf(stderr, "Error loading description: %s\n", dlerror());
-            exit(1);
-        }
-        void *pot_ball = dlsym(handle, "pot_ball");
-        if (pot_ball == NULL)
-        {
-            fprintf(stderr, "Error loading pot_ball: %s\n", dlerror());
-            exit(1);
-        }
-        PlayerModule player_module = {
-            .name = name,
-            .description = description,
-            .pot_ball = pot_ball,
-            .handle = handle,
-            .library_path = library_path};
-        Player player = {.module = player_module, .type = AI};
+        PlayerModule module = select_algo_screen->player_modules[select_algo_screen->selected_module];
+        Player player = {.module = module, .type = AI};
         Game *game = create_game(&player, 1);
         free(screen);
         return (Screen *)create_algorithm_screen(game);
@@ -55,11 +35,13 @@ void render_select_algo_screen(Screen *screen)
     DrawText("Select Algorithm", 20, 20, 40, DARKGRAY);
 
     SelectAlgoScreen *select_algo_screen = (SelectAlgoScreen *)screen;
+    Color colour;
     for (int i = 0; i < select_algo_screen->num_player_modules; i++)
     {
+        colour = i == select_algo_screen->selected_module ? RED : DARKGRAY;
         PlayerModule player_module = select_algo_screen->player_modules[i];
-        DrawText(player_module.name, 20, 80 + i * 40, 20, DARKGRAY);
-        DrawText(player_module.description, 20, 100 + i * 40, 20, DARKGRAY);
+        DrawText(player_module.name, 20, 80 + i * 40, 20, colour);
+        DrawText(player_module.description, 20, 100 + i * 40, 20, colour);
     }
 }
 
@@ -68,6 +50,11 @@ Screen *create_select_algo_screen()
     SelectAlgoScreen *select_algo_screen = malloc(sizeof(SelectAlgoScreen));
     select_algo_screen->base.update = update_select_algo_screen;
     select_algo_screen->base.render = render_select_algo_screen;
+
+    char **paths = load_library_paths("./player_modules", &select_algo_screen->num_libraries);
+    PlayerModule *modules = load_player_modules(paths, select_algo_screen->num_libraries, &select_algo_screen->num_player_modules);
+    select_algo_screen->player_modules = modules;
+    select_algo_screen->selected_module = 0;
 
     return (Screen *)select_algo_screen;
 }

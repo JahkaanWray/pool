@@ -1,95 +1,13 @@
 #include "selectscreen.h"
 #include "mainmenuscreen.h"
 #include "gameplayscreen.h"
+#include "dl.h"
 #include <raylib.h>
 #include <stdio.h>
 #include <dirent.h>
 #include <dlfcn.h>
 #include <stdlib.h>
 #include <string.h>
-
-void load_player_libraries(SelectScreen *select_screen)
-{
-    for (int i = 0; i < select_screen->num_libraries; i++)
-    {
-        const char *library_folder = "./player_modules/";
-        char *library_path = select_screen->library_paths[i];
-        char *full_path = malloc(strlen(library_folder) + strlen(library_path) + 1);
-        strcpy(full_path, library_folder);
-        strcat(full_path, library_path);
-        printf("Loading library: %s\n", full_path);
-        void *library = dlopen(full_path, RTLD_LAZY);
-        if (!library)
-        {
-            fprintf(stderr, "dlopen failed: %s\n", dlerror());
-            free(full_path);
-            continue;
-        }
-        void *pot_ball = (PlayerPotBallFunction)dlsym(library, "pot_ball");
-        printf("Loading function\n");
-        if (!pot_ball)
-        {
-            fprintf(stderr, "dlsym failed: %s\n", dlerror());
-            free(full_path);
-            continue;
-        }
-        char *name = *(char **)dlsym(library, "name");
-        printf("Loading name\n");
-        if (name == NULL)
-        {
-            fprintf(stderr, "dlsym failed: %s\n", dlerror());
-            free(full_path);
-            continue;
-        }
-        char *description = *(char **)dlsym(library, "description");
-        printf("Loading description\n");
-        if (description == NULL)
-        {
-            fprintf(stderr, "dlsym failed: %s\n", dlerror());
-            free(full_path);
-            continue;
-        }
-        printf("%s\n", description);
-
-        PlayerModule player_module = {
-            .name = name,
-            .description = description,
-            .pot_ball = pot_ball,
-            .handle = library,
-            .library_path = full_path};
-
-        select_screen->player_modules[select_screen->num_player_modules++] = player_module;
-    }
-}
-
-void load_library_paths(SelectScreen *select_screen)
-{
-    DIR *dir;
-    struct dirent *ent;
-    int i = 0;
-    const char *current_dir = ".";
-    const char *parent_dir = "..";
-    if ((dir = opendir("./player_modules")) != NULL)
-    {
-        while ((ent = readdir(dir)) != NULL)
-        {
-            char *name = ent->d_name;
-            if (strcmp(name, current_dir) == 0 || strcmp(name, parent_dir) == 0)
-            {
-                continue;
-            }
-            printf("%s\n", name);
-            select_screen->library_paths[i++] = name;
-            select_screen->num_libraries++;
-        }
-        closedir(dir);
-    }
-    else
-    {
-        perror("");
-        return;
-    }
-}
 
 Screen *create_select_screen()
 {
@@ -105,8 +23,9 @@ Screen *create_select_screen()
     screen->player_modules = malloc(10 * sizeof(PlayerModule));
     screen->num_player_modules = 0;
     screen->selected_module = 0;
-    load_library_paths(screen);
-    load_player_libraries(screen);
+    char **paths = load_library_paths("./player_modules", &screen->num_libraries);
+    PlayerModule *modules = load_player_modules(paths, screen->num_libraries, &screen->num_player_modules);
+    screen->player_modules = modules;
     for (int i = 0; i < screen->num_players; i++)
     {
         screen->players[i].type = HUMAN;

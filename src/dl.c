@@ -3,15 +3,16 @@
 #include <stdlib.h>
 #include <dirent.h>
 #include <dlfcn.h>
+#include <string.h>
 
-void load_library_paths(char **paths, int *num_paths)
+char **load_library_paths(const char *directory_path, int *num_paths)
 {
     DIR *dir;
     struct dirent *ent;
     const char *current_dir = ".";
     const char *parent_dir = "..";
     int count = 0;
-    if ((dir = opendir("./player_modules")) != NULL)
+    if ((dir = opendir(directory_path)) != NULL)
     {
         while ((ent = readdir(dir)) != NULL)
         {
@@ -28,9 +29,9 @@ void load_library_paths(char **paths, int *num_paths)
     *num_paths = count;
     closedir(dir);
 
-    paths = malloc(count * sizeof(char *));
+    char **paths = malloc(count * sizeof(char *));
 
-    if ((dir = opendir("./player_modules")) != NULL)
+    if ((dir = opendir(directory_path)) != NULL)
     {
         int i = 0;
         while ((ent = readdir(dir)) != NULL)
@@ -40,50 +41,56 @@ void load_library_paths(char **paths, int *num_paths)
             {
                 continue;
             }
-            paths[i++] = name;
+            paths[i] = malloc(strlen(name) + strlen(directory_path) + 2);
+            strcpy(paths[i], directory_path);
+            strcat(paths[i], "/");
+            strcat(paths[i], name);
+            i++;
         }
     }
+
+    return paths;
 }
 
-void load_player_modules(char **paths, int num_paths, PlayerModule *player_modules, int *num_player_modules)
+PlayerModule *load_player_modules(char **paths, int num_paths, int *num_player_modules)
 {
+    PlayerModule *player_modules = malloc(num_paths * sizeof(PlayerModule));
+    int count = 0;
     for (int i = 0; i < num_paths; i++)
     {
-        char *full_path = malloc(256);
-        sprintf(full_path, "./player_modules/%s", paths[i]);
-        void *library = dlopen(full_path, RTLD_LAZY);
-        if (library == NULL)
+        void *handle = dlopen(paths[i], RTLD_LAZY);
+        if (handle == NULL)
         {
-            fprintf(stderr, "dlopen failed: %s\n", dlerror());
+            fprintf(stderr, "Error loading library: %s\n", dlerror());
             continue;
         }
-        void *pot_ball = dlsym(library, "pot_ball");
-        if (pot_ball == NULL)
-        {
-            fprintf(stderr, "dlsym failed: %s\n", dlerror());
-            continue;
-        }
-        char *name = *(char **)dlsym(library, "name");
+        char *name = *(char **)dlsym(handle, "name");
         if (name == NULL)
         {
-            fprintf(stderr, "dlsym failed: %s\n", dlerror());
+            fprintf(stderr, "Error loading name: %s\n", dlerror());
             continue;
         }
-        char *description = *(char **)dlsym(library, "description");
+        char *description = *(char **)dlsym(handle, "description");
         if (description == NULL)
         {
-            fprintf(stderr, "dlsym failed: %s\n", dlerror());
+            fprintf(stderr, "Error loading description: %s\n", dlerror());
             continue;
         }
-
+        void *pot_ball = dlsym(handle, "pot_ball");
+        if (pot_ball == NULL)
+        {
+            fprintf(stderr, "Error loading pot_ball: %s\n", dlerror());
+            continue;
+        }
         PlayerModule player_module = {
             .name = name,
             .description = description,
             .pot_ball = pot_ball,
-            .handle = library,
-            .library_path = full_path};
-
-        player_modules[*num_player_modules] = player_module;
-        (*num_player_modules)++;
+            .handle = handle,
+            .library_path = paths[i]};
+        player_modules[count++] = player_module;
     }
+
+    *num_player_modules = count;
+    return player_modules;
 }
