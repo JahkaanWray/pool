@@ -880,8 +880,8 @@ Table create_table()
     table.cushions = malloc(4 * sizeof(Cushion));
     table.num_cushions = 4;
     table.cushion_capacity = 4;
-    table.cushions[0] = (Cushion){{100, 100, 0}, {800, 100, 0}};
-    table.cushions[1] = (Cushion){{800, 100, 0}, {800, 800, 0}};
+    table.cushions[0] = (Cushion){{100, 100, 0}, {1000, 100, 0}};
+    table.cushions[1] = (Cushion){{1000, 100, 0}, {800, 800, 0}};
     table.cushions[2] = (Cushion){{800, 800, 0}, {100, 800, 0}};
     table.cushions[3] = (Cushion){{100, 800, 0}, {100, 100, 0}};
     table.num_pockets = 4;
