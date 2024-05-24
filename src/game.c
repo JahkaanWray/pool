@@ -4,6 +4,17 @@
 #include <raylib.h>
 #include <assert.h>
 
+Vector3 world_to_screen(Vector3 position)
+{
+    double scale = 200;
+    return (Vector3){200 * position.x, 200 * position.y, 0};
+}
+
+int meters_to_pixels(double meters)
+{
+    return (int)(200 * meters);
+}
+
 void update_stats(Game *game)
 {
     game->p1_stats = (Stats){0, 0, 0};
@@ -496,7 +507,7 @@ void resolve_ball_pocket_collision(Ball *ball, Pocket pocket, double time, Coeff
     Vector3 p;
     if (ball->id == 0)
     {
-        p = (Vector3){500, 300, 0};
+        p = (Vector3){0.3, 0.3, 0};
     }
     else
     {
@@ -666,8 +677,8 @@ void render_path_segment(PathSegment segment)
 {
     if (segment.rolling)
     {
-        Vector3 p1 = segment.initial_position;
-        Vector3 p2 = get_position(segment, segment.end_time);
+        Vector3 p1 = world_to_screen(segment.initial_position);
+        Vector3 p2 = world_to_screen(get_position(segment, segment.end_time));
         DrawLine(p1.x, p1.y, p2.x, p2.y, BLUE);
     }
     else
@@ -676,8 +687,8 @@ void render_path_segment(PathSegment segment)
         {
             double t1 = segment.start_time + i * (segment.end_time - segment.start_time) / 100;
             double t2 = segment.start_time + (i + 1) * (segment.end_time - segment.start_time) / 100;
-            Vector3 p1 = get_position(segment, t1);
-            Vector3 p2 = get_position(segment, t2);
+            Vector3 p1 = world_to_screen(get_position(segment, t1));
+            Vector3 p2 = world_to_screen(get_position(segment, t2));
             DrawLine(p1.x, p1.y, p2.x, p2.y, RED);
         }
     }
@@ -775,12 +786,15 @@ void render_table(Table table)
     for (int i = 0; i < table.num_cushions; i++)
     {
         Cushion cushion = table.cushions[i];
-        DrawLine(cushion.p1.x, cushion.p1.y, cushion.p2.x, cushion.p2.y, BLACK);
+        Vector3 p1 = world_to_screen(cushion.p1);
+        Vector3 p2 = world_to_screen(cushion.p2);
+        DrawLine(p1.x, p1.y, p2.x, p2.y, BLACK);
     }
     for (int i = 0; i < table.num_pockets; i++)
     {
         Pocket pocket = table.pockets[i];
-        DrawCircle(pocket.position.x, pocket.position.y, pocket.radius, BLACK);
+        Vector3 p = world_to_screen(pocket.position);
+        DrawCircle(p.x, p.y, meters_to_pixels(pocket.radius), BLACK);
     }
 }
 
@@ -803,14 +817,14 @@ BallSet standard_ball_set()
     {
         Ball ball;
         ball.id = i;
-        ball.initial_position = (Vector3){500, 200 + 50 * i, 0};
-        ball.radius = 10;
-        ball.mass = 1;
+        ball.initial_position = (Vector3){1, 1 + 0.2 * i, 0};
+        ball.radius = 0.05;
+        ball.mass = 0.16;
         ball.path = new_path();
         ball_set.balls[i] = ball;
         ball_set.balls[i].pocketed = false;
     }
-    ball_set.balls[0].initial_position.x = 700;
+    ball_set.balls[0].initial_position.x = 0.5;
     ball_set.balls[0].colour = WHITE;
     ball_set.balls[1].colour = YELLOW;
     ball_set.balls[2].colour = BLUE;
@@ -880,19 +894,20 @@ Table create_table()
     table.cushions = malloc(4 * sizeof(Cushion));
     table.num_cushions = 4;
     table.cushion_capacity = 4;
-    table.cushions[0] = (Cushion){{100, 100, 0}, {1000, 100, 0}};
-    table.cushions[1] = (Cushion){{1000, 100, 0}, {800, 800, 0}};
-    table.cushions[2] = (Cushion){{800, 800, 0}, {100, 800, 0}};
-    table.cushions[3] = (Cushion){{100, 800, 0}, {100, 100, 0}};
+    table.cushions[0] = (Cushion){{0, 0, 0}, {2, 0, 0}};
+    table.cushions[1] = (Cushion){{2, 0, 0}, {2, 4, 0}};
+    table.cushions[2] = (Cushion){{2, 4, 0}, {0, 4, 0}};
+    table.cushions[3] = (Cushion){{0, 4, 0}, {0, 0, 0}};
     table.num_pockets = 4;
     table.pockets = malloc(table.num_pockets * sizeof(Pocket));
     table.pocket_capacity = table.num_pockets;
-    table.pockets[0] = (Pocket){{100, 100, 0}, 20};
-    table.pockets[1] = (Pocket){{800, 100, 0}, 20};
-    table.pockets[2] = (Pocket){{800, 800, 0}, 20};
-    table.pockets[3] = (Pocket){{100, 800, 0}, 20};
+    table.pockets[0] = (Pocket){{0, 0, 0}, 0.15};
+    table.pockets[1] = (Pocket){{2, 0, 0}, 0.15};
+    table.pockets[2] = (Pocket){{2, 4, 0}, 0.15};
+    table.pockets[3] = (Pocket){{0, 4, 0}, 0.15};
     return table;
 }
+
 Scene create_scene()
 {
     Scene scene;
@@ -931,7 +946,7 @@ void setup_new_frame(Game *game)
         Ball *ball = &(game->scene.ball_set.balls[i]);
         ball->pocketed = false;
         ball->path.num_segments = 0;
-        ball->initial_position = (Vector3){GetRandomValue(200, 700), 200 + 50 * i, 0};
+        ball->initial_position = (Vector3){(double)GetRandomValue(30, 170) / 100, 0.3 + 0.2 * i, 0};
     }
 }
 bool apply_game_rules(Game *game)
@@ -1194,7 +1209,14 @@ void update_game(Game *game)
             }
             if (mx > 1550 && mx < 1630 && my > 10 && my < 890)
             {
-                game->w = Vector3Scale(Vector3Normalize(game->w), 890 - my);
+                if (game->w.x == 0 && game->w.y == 0 && game->w.z == 0)
+                {
+                    game->w = Vector3Scale((Vector3){1, 0, 0}, 890 - my);
+                }
+                else
+                {
+                    game->w = Vector3Scale(Vector3Normalize(game->w), 890 - my);
+                }
             }
             if (mx > 0 && mx < 100 && my > 700 && my < 800)
             {
@@ -1209,7 +1231,7 @@ void update_game(Game *game)
                 game->w = Vector3Scale(game->w, w_mag);
             }
             // solve_direct_shot(&scene, scene.ball_set.balls[0].initial_position, target_position, v_roll, &required_velocity, &required_angular_velocity);
-            game->v = Vector3Subtract((Vector3){mx, my, 0}, game->scene.ball_set.balls[0].initial_position);
+            game->v = Vector3Scale(Vector3Subtract((Vector3){mx, my, 0}, world_to_screen(game->scene.ball_set.balls[0].initial_position)), 0.05);
             clear_paths(&(game->scene));
             generate_shot(game, game->v, game->w);
             game->time = 0;
@@ -1267,8 +1289,8 @@ void update_game(Game *game)
 
 void render_ball(Ball ball, double time)
 {
-    Vector3 position = get_ball_position(ball, time);
-    DrawCircle(position.x, position.y, ball.radius, ball.colour);
+    Vector3 position = world_to_screen(get_ball_position(ball, time));
+    DrawCircle(position.x, position.y, meters_to_pixels(ball.radius), ball.colour);
     render_path(ball.path);
 }
 
