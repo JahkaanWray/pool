@@ -1,14 +1,27 @@
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
 #include "polynomial.h"
 
-int main()
+int main(int argc, char **argv)
 {
-    double a, b, c, d, e, x1, x2, x3, x4;
+    if (argc != 2)
+    {
+        printf("Usage: %s <number of iterations>\n", argv[0]);
+        return 1;
+    }
 
-    printf("Enter a, b, c, d, e: ");
-    scanf("%lf %lf %lf %lf %lf", &a, &b, &c, &d, &e);
-    solve_quartic(a, b, c, d, e, &x1, &x2, &x3, &x4);
-    printf("The roots are %lf, %lf, %lf, %lf\n", x1, x2, x3, x4);
-    return 0;
+    int iterations = atoi(argv[1]);
+
+    for (int i = 0; i < iterations; i++)
+    {
+        double coeffs[5];
+        for (int j = 0; j < 5; j++)
+        {
+            coeffs[j] = rand() % 10;
+        }
+        double roots[4];
+        solve_quartic(coeffs[0], coeffs[1], coeffs[2], coeffs[3], coeffs[4], &roots[0], &roots[1], &roots[2], &roots[3]);
+    }
 }
