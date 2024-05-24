@@ -1301,8 +1301,6 @@ void render_UI(Game *game, Vector3 v, Vector3 w)
     DrawLine(50, 750, 50 + 50 * v_normalized.x, 750 + 50 * v_normalized.y, WHITE);
     DrawLine(50, 850, 50 + 50 * w_normalized.x, 850 + 50 * w_normalized.y, WHITE);
 
-    DrawFPS(1350, 10);
-
     if (game->state == BEFORE_SHOT)
     {
         DrawText("Before shot", 10, 10, 20, WHITE);
@@ -1448,6 +1446,8 @@ void render_UI(Game *game, Vector3 v, Vector3 w)
     char player2_stats[100];
     sprintf(player2_stats, "Player 2: %d shots, %d pots, %d fouls", game->p2_stats.num_shots, game->p2_stats.num_pots, game->p2_stats.num_fouls);
     DrawText(player2_stats, 10, 310, 20, WHITE);
+
+    DrawFPS(120, 850);
 }
 
 void render_game(Game *game)
