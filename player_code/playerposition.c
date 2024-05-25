@@ -322,7 +322,7 @@ void pot_ball(Game *game, Ball *ball)
     {
         return;
     }
-    game->v = (Vector3){100, 0, 0};
+    game->v = (Vector3){0, 0, 0};
     game->w = Vector3Zero();
     return;
 }
