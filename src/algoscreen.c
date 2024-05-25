@@ -3,6 +3,7 @@
 #include "dlfcn.h"
 #include <raylib.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 Screen *create_algorithm_screen(Game *game)
 {
@@ -39,6 +40,7 @@ Screen *update_algorithm_screen(Screen *screen)
     Ball *ball = &game->scene.ball_set.balls[algo_screen->current_ball];
     Vector2 mouse_position = GetMousePosition();
     ball->initial_position = (Vector3){mouse_position.x, mouse_position.y, 0};
+    ball->initial_position = Vector3Scale(ball->initial_position, 1.0 / 200);
     Ball *target_ball = &game->scene.ball_set.balls[1];
     algo_screen->game->players[0].module.pot_ball(algo_screen->game, target_ball);
     clear_paths(&game->scene);

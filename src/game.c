@@ -507,7 +507,7 @@ void resolve_ball_pocket_collision(Ball *ball, Pocket pocket, double time, Coeff
     Vector3 p;
     if (ball->id == 0)
     {
-        p = (Vector3){0.3, 0.3, 0};
+        p = (Vector3){2.3, 0.3, 0};
     }
     else
     {
@@ -617,14 +617,17 @@ bool update_path(Game *game)
     }
     if (update_type == BALL_BALL_COLLISION)
     {
+        printf("Collision between ball %d and ball %d\n", ball1->id, ball2->id);
         resolve_ball_ball_collision(ball1, ball2, first_time, game->scene.coefficients);
     }
     else if (update_type == BALL_CUSHION_COLLISION)
     {
+        printf("Collision between ball %d and cushion\n", ball1->id);
         resolve_ball_cushion_collision(ball1, cushion, first_time, game->scene.coefficients);
     }
     else if (update_type == BALL_POCKETED)
     {
+        printf("Ball %d pocketed\n", ball1->id);
         resolve_ball_pocket_collision(ball1, pocket, first_time, game->scene.coefficients);
     }
     else if (update_type == BALL_ROLL)
@@ -894,17 +897,17 @@ Table create_table()
     table.cushions = malloc(4 * sizeof(Cushion));
     table.num_cushions = 4;
     table.cushion_capacity = 4;
-    table.cushions[0] = (Cushion){{0, 0, 0}, {2, 0, 0}};
-    table.cushions[1] = (Cushion){{2, 0, 0}, {2, 4, 0}};
-    table.cushions[2] = (Cushion){{2, 4, 0}, {0, 4, 0}};
-    table.cushions[3] = (Cushion){{0, 4, 0}, {0, 0, 0}};
+    table.cushions[0] = (Cushion){{2, 0, 0}, {6, 0, 0}};
+    table.cushions[1] = (Cushion){{6, 0, 0}, {6, 4, 0}};
+    table.cushions[2] = (Cushion){{6, 4, 0}, {2, 4, 0}};
+    table.cushions[3] = (Cushion){{2, 4, 0}, {2, 0, 0}};
     table.num_pockets = 4;
     table.pockets = malloc(table.num_pockets * sizeof(Pocket));
     table.pocket_capacity = table.num_pockets;
-    table.pockets[0] = (Pocket){{0, 0, 0}, 0.15};
-    table.pockets[1] = (Pocket){{2, 0, 0}, 0.15};
-    table.pockets[2] = (Pocket){{2, 4, 0}, 0.15};
-    table.pockets[3] = (Pocket){{0, 4, 0}, 0.15};
+    table.pockets[0] = (Pocket){{2, 0, 0}, 0.15};
+    table.pockets[1] = (Pocket){{6, 0, 0}, 0.15};
+    table.pockets[2] = (Pocket){{6, 4, 0}, 0.15};
+    table.pockets[3] = (Pocket){{2, 4, 0}, 0.15};
     return table;
 }
 
@@ -914,8 +917,8 @@ Scene create_scene()
     scene.table = create_table();
     scene.ball_set = standard_ball_set();
     Coefficients coefficients;
-    coefficients.mu_slide = 15.5;
-    coefficients.mu_roll = 2.6;
+    coefficients.mu_slide = 0.2;
+    coefficients.mu_roll = 0.02;
     coefficients.mu_ball_cushion = 0.5;
     coefficients.mu_ball_ball = 0.5;
     coefficients.g = 9.8;
@@ -946,7 +949,7 @@ void setup_new_frame(Game *game)
         Ball *ball = &(game->scene.ball_set.balls[i]);
         ball->pocketed = false;
         ball->path.num_segments = 0;
-        ball->initial_position = (Vector3){(double)GetRandomValue(30, 170) / 100, 0.3 + 0.2 * i, 0};
+        ball->initial_position = (Vector3){(double)GetRandomValue(230, 570) / 100, 0.3 + 0.2 * i, 0};
     }
 }
 bool apply_game_rules(Game *game)
@@ -1051,6 +1054,7 @@ bool apply_game_rules(Game *game)
 
 void generate_shot(Game *game, Vector3 velocity, Vector3 angular_velocity)
 {
+    printf("Generating shot\n");
     Ball *cue_ball = &(game->scene.ball_set.balls[0]);
     game->current_shot.num_events = 0;
     generate_paths(game, cue_ball, cue_ball->initial_position, velocity, angular_velocity, 0);
@@ -1231,7 +1235,7 @@ void update_game(Game *game)
                 game->w = Vector3Scale(game->w, w_mag);
             }
             // solve_direct_shot(&scene, scene.ball_set.balls[0].initial_position, target_position, v_roll, &required_velocity, &required_angular_velocity);
-            game->v = Vector3Scale(Vector3Subtract((Vector3){mx, my, 0}, world_to_screen(game->scene.ball_set.balls[0].initial_position)), 0.05);
+            game->v = Vector3Scale(Vector3Subtract((Vector3){mx, my, 0}, world_to_screen(game->scene.ball_set.balls[0].initial_position)), 0.005);
             clear_paths(&(game->scene));
             generate_shot(game, game->v, game->w);
             game->time = 0;
