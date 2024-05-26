@@ -188,11 +188,18 @@ double quartic_newton_iterate(double a, double b, double c, double d, double e, 
     double f = evaluate_quartic(a, b, c, d, e, x);
     double f_prime = evaluate_cubic(4 * a, 3 * b, 2 * c, d, x);
 
-    while (fabs(f) > 1e-9)
+    int i = 0;
+
+    while (fabs(f) > 1e-10 && i < 1000)
     {
         x = x - f / f_prime;
         f = evaluate_quartic(a, b, c, d, e, x);
         f_prime = evaluate_cubic(4 * a, 3 * b, 2 * c, d, x);
+        i++;
+    }
+    if (i == 1000 && fabs(f) < 1e-8)
+    {
+        return x;
     }
     return x;
 }
@@ -274,10 +281,10 @@ void solve_quartic_j(double a, double b, double c, double d, double e, double *x
         double c1 = 0.5 * f_double_prime * x0 * x0 - f_prime * x0 + f;
 
         double root1 = (-b1 - sqrt(b1 * b1 - 4 * a1 * c1)) / (2 * a1);
-        root1 = quartic_quadratic_newton_iterate(a, b, c, d, e, root1);
+        root1 = quartic_newton_iterate(a, b, c, d, e, root1);
 
         double root2 = (-b1 + sqrt(b1 * b1 - 4 * a1 * c1)) / (2 * a1);
-        root2 = quartic_quadratic_newton_iterate(a, b, c, d, e, root2);
+        root2 = quartic_newton_iterate(a, b, c, d, e, root2);
 
         *x1 = root1;
         *x2 = root2;
@@ -309,7 +316,7 @@ void solve_quartic_j(double a, double b, double c, double d, double e, double *x
         double c1 = 0.5 * f_double_prime * x0 * x0 - f_prime * x0 + f;
 
         double root1 = (-b1 - sqrt(b1 * b1 - 4 * a1 * c1)) / (2 * a1);
-        root1 = quartic_quadratic_newton_iterate(a, b, c, d, e, root1);
+        root1 = quartic_newton_iterate(a, b, c, d, e, root1);
 
         x0 = sorted_stationary_points[3];
         f = evaluate_quartic(a, b, c, d, e, x0);
@@ -321,7 +328,7 @@ void solve_quartic_j(double a, double b, double c, double d, double e, double *x
         c1 = 0.5 * f_double_prime * x0 * x0 - f_prime * x0 + f;
 
         double root2 = (-b1 + sqrt(b1 * b1 - 4 * a1 * c1)) / (2 * a1);
-        root2 = quartic_quadratic_newton_iterate(a, b, c, d, e, root2);
+        root2 = quartic_newton_iterate(a, b, c, d, e, root2);
 
         *x1 = root1;
         *x2 = root2;
@@ -342,10 +349,10 @@ void solve_quartic_j(double a, double b, double c, double d, double e, double *x
         double c1 = 0.5 * f_double_prime * x0 * x0 - f_prime * x0 + f;
 
         double root1 = (-b1 - sqrt(b1 * b1 - 4 * a1 * c1)) / (2 * a1);
-        root1 = quartic_quadratic_newton_iterate(a, b, c, d, e, root1);
+        root1 = quartic_newton_iterate(a, b, c, d, e, root1);
 
         double root2 = (-b1 + sqrt(b1 * b1 - 4 * a1 * c1)) / (2 * a1);
-        root2 = quartic_quadratic_newton_iterate(a, b, c, d, e, root2);
+        root2 = quartic_newton_iterate(a, b, c, d, e, root2);
 
         x0 = sorted_stationary_points[2];
         f = evaluate_quartic(a, b, c, d, e, x0);
@@ -357,10 +364,10 @@ void solve_quartic_j(double a, double b, double c, double d, double e, double *x
         c1 = 0.5 * f_double_prime * x0 * x0 - f_prime * x0 + f;
 
         double root3 = (-b1 - sqrt(b1 * b1 - 4 * a1 * c1)) / (2 * a1);
-        root3 = quartic_quadratic_newton_iterate(a, b, c, d, e, root3);
+        root3 = quartic_newton_iterate(a, b, c, d, e, root3);
 
         double root4 = (-b1 + sqrt(b1 * b1 - 4 * a1 * c1)) / (2 * a1);
-        root4 = quartic_quadratic_newton_iterate(a, b, c, d, e, root4);
+        root4 = quartic_newton_iterate(a, b, c, d, e, root4);
 
         *x1 = root1;
         *x2 = root2;
@@ -381,10 +388,10 @@ void solve_quartic_j(double a, double b, double c, double d, double e, double *x
         double c1 = 0.5 * f_double_prime * x0 * x0 - f_prime * x0 + f;
 
         double root1 = (-b1 - sqrt(b1 * b1 - 4 * a1 * c1)) / (2 * a1);
-        root1 = quartic_quadratic_newton_iterate(a, b, c, d, e, root1);
+        root1 = quartic_newton_iterate(a, b, c, d, e, root1);
 
         double root2 = (-b1 + sqrt(b1 * b1 - 4 * a1 * c1)) / (2 * a1);
-        root2 = quartic_quadratic_newton_iterate(a, b, c, d, e, root2);
+        root2 = quartic_newton_iterate(a, b, c, d, e, root2);
 
         *x1 = root1;
         *x2 = root2;
@@ -404,10 +411,10 @@ void solve_quartic_j(double a, double b, double c, double d, double e, double *x
         double c1 = 0.5 * f_double_prime * x0 * x0 - f_prime * x0 + f;
 
         double root1 = (-b1 - sqrt(b1 * b1 - 4 * a1 * c1)) / (2 * a1);
-        root1 = quartic_quadratic_newton_iterate(a, b, c, d, e, root1);
+        root1 = quartic_newton_iterate(a, b, c, d, e, root1);
 
         double root2 = (-b1 + sqrt(b1 * b1 - 4 * a1 * c1)) / (2 * a1);
-        root2 = quartic_quadratic_newton_iterate(a, b, c, d, e, root2);
+        root2 = quartic_newton_iterate(a, b, c, d, e, root2);
 
         *x1 = root1;
         *x2 = root2;
