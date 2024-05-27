@@ -38,14 +38,17 @@ selectalgoscreen.o: src/selectalgoscreen.c
 algoscreen.o: src/algoscreen.c
 	gcc -c src/algoscreen.c -lraylib -lm $(CFLAGS)
 
+algotestscreen.o: src/algotestscreen.c
+	gcc -c src/algotestscreen.c -lraylib -lm $(CFLAGS)
+
 gameplayscreen.o: src/gameplayscreen.c
 	gcc -c src/gameplayscreen.c -lraylib -lm $(CFLAGS)
 
 pausescreen.o: src/pausescreen.c
 	gcc -c src/pausescreen.c -lraylib -lm $(CFLAGS)
 
-main: src/main.c vector3.o polynomial.o  mainmenuscreen.o selectscreen.o selectalgoscreen.o algoscreen.o gameplayscreen.o pausescreen.o game.o serialise.o dl.o
-	gcc -o main src/main.c vector3.o polynomial.o mainmenuscreen.o selectscreen.o selectalgoscreen.o algoscreen.o gameplayscreen.o pausescreen.o serialise.o game.o dl.o -lm -lraylib $(CFLAGS)
+main: src/main.c vector3.o polynomial.o mainmenuscreen.o selectscreen.o selectalgoscreen.o algoscreen.o algotestscreen.o gameplayscreen.o pausescreen.o game.o serialise.o dl.o
+	gcc -o main src/main.c vector3.o polynomial.o mainmenuscreen.o selectscreen.o selectalgoscreen.o algoscreen.o algotestscreen.o gameplayscreen.o pausescreen.o serialise.o game.o dl.o -lm -lraylib $(CFLAGS)
 
 main2: src/main2.c
 	gcc -o main2 src/main2.c -lraylib -lm $(CFLAGS)

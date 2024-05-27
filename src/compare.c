@@ -93,7 +93,7 @@ int main(int argc, char *argv[])
     game->playback_speed = 1000;
     game->default_playback_speed = 1000;
 
-    while (game->num_frames < 10)
+    while (game->num_frames < 1000)
     {
         printf("Frame %d\n", game->num_frames + 1);
         update_game(game);
@@ -110,7 +110,6 @@ int main(int argc, char *argv[])
     int freqs[20] = {0};
     for (int i = 0; i < game->num_frames; i++)
     {
-        printf("Frame winner: %p\n", (void *)frames[i].winner);
         if (frames[i].winner == &(game->players[0]))
         {
             p1++;
@@ -152,33 +151,7 @@ int main(int argc, char *argv[])
         printf("%d: %d\n", i, freqs[i]);
     }
 
-    for (int i = 0; i < game->num_frames; i++)
-    {
-        printf("Frame %d\n", i);
-        for (int j = 0; j < frames[i].num_shots; j++)
-        {
-            printf("Shot %d\n", j);
-            printf("Players array %p\n", (void *)game->players);
-            printf("%p %p\n", (void *)&(game->players[0]), (void *)&(game->players[1]));
-            printf("Player: %p\n", (void *)(frames[i].shot_history[j].player));
-            for (int k = 0; k < game->scene.ball_set.num_balls; k++)
-            {
-                printf("Ball %d\n", k);
-                for (int l = 0; l < frames[i].shot_history[j].ball_paths[k].num_segments; l++)
-                {
-                    printf("Segment %d\n", l);
-                    printf("Initial position: (%f, %f, %f)\n", frames[i].shot_history[j].ball_paths[k].segments[l].initial_position.x, frames[i].shot_history[j].ball_paths[k].segments[l].initial_position.y, frames[i].shot_history[j].ball_paths[k].segments[l].initial_position.z);
-                    printf("Initial velocity: (%f, %f, %f)\n", frames[i].shot_history[j].ball_paths[k].segments[l].initial_velocity.x, frames[i].shot_history[j].ball_paths[k].segments[l].initial_velocity.y, frames[i].shot_history[j].ball_paths[k].segments[l].initial_velocity.z);
-                    printf("Acceleration: (%f, %f, %f)\n", frames[i].shot_history[j].ball_paths[k].segments[l].acceleration.x, frames[i].shot_history[j].ball_paths[k].segments[l].acceleration.y, frames[i].shot_history[j].ball_paths[k].segments[l].acceleration.z);
-                    printf("Start time: %f\n", frames[i].shot_history[j].ball_paths[k].segments[l].start_time);
-                    printf("End time: %f\n", frames[i].shot_history[j].ball_paths[k].segments[l].end_time);
-                }
-            }
-        }
-    }
-
     serialise_game(game);
-    deserialise_game("frames.bin");
 
     return 0;
 }

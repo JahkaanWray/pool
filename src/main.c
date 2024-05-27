@@ -55,6 +55,10 @@ int main()
     while (!WindowShouldClose())
     {
         app.current_screen = update_app(&app);
+        if (app.current_screen == NULL)
+        {
+            break;
+        }
         render_app(&app);
     }
 
