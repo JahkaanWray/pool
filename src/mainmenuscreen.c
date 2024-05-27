@@ -1,6 +1,7 @@
 #include "mainmenuscreen.h"
 #include "selectscreen.h"
 #include "selectalgoscreen.h"
+#include "algotestscreen.h"
 #include "player.h"
 #include <raylib.h>
 #include <stdlib.h>
@@ -15,6 +16,11 @@ Screen *create_main_menu_screen()
 
 Screen *update_main_menu_screen(Screen *screen)
 {
+    if (IsKeyPressed(KEY_ESCAPE))
+    {
+        free(screen);
+        return NULL;
+    }
     if (IsKeyPressed(KEY_ENTER))
     {
         SelectScreen *select_screen = (SelectScreen *)create_select_screen();
@@ -26,6 +32,14 @@ Screen *update_main_menu_screen(Screen *screen)
         SelectAlgoScreen *select_algo_screen = (SelectAlgoScreen *)create_select_algo_screen();
         free(screen);
         return (Screen *)select_algo_screen;
+    }
+    if (IsKeyPressed(KEY_B))
+    {
+        Player player = {.type = HUMAN};
+        Game *game = create_game(&player, 1);
+        AlgorithmTestScreen *algo_test_screen = (AlgorithmTestScreen *)create_algorithm_test_screen(game);
+        free(screen);
+        return (Screen *)algo_test_screen;
     }
     return screen;
 }
