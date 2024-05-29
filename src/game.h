@@ -31,6 +31,7 @@ typedef struct
     bool rolling;
     double start_time;
     double end_time;
+    Quaternion *orientations;
 } PathSegment;
 
 typedef struct
@@ -54,6 +55,7 @@ typedef struct Ball
 {
     int id;
     Vector3 initial_position;
+    Quaternion initial_orientation;
     Color colour;
     double radius;
     double mass;

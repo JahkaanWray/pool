@@ -171,7 +171,7 @@ void add_sliding_segment(Ball *ball, Vector3 initial_position, Vector3 initial_v
     Vector3 acceleration = Vector3Scale(Vector3Normalize(contact_point_v), -mu_slide * g);
     Vector3 angular_acceleration = Vector3Scale(Vector3CrossProduct(acceleration, (Vector3){0, 0, -1}), -2.5 / R);
     double end_time = start_time + 2 * Vector3Length(contact_point_v) / (7 * mu_slide * g);
-    PathSegment segment = {initial_position, initial_velocity, acceleration, initial_angular_velocity, angular_acceleration, false, start_time, end_time};
+    PathSegment segment = {initial_position, initial_velocity, acceleration, initial_angular_velocity, angular_acceleration, false, start_time, end_time, NULL};
     ball->path.segments[ball->path.num_segments - 1].end_time = start_time;
     add_segment(&(ball->path), segment);
 }
@@ -185,7 +185,7 @@ void add_rolling_segment(Ball *ball, Vector3 initial_position, Vector3 initial_v
     Vector3 initial_angular_velocity = Vector3CrossProduct(initial_velocity, (Vector3){0, 0, -1 / R});
     Vector3 angular_acceleration = Vector3Scale(Vector3CrossProduct(acceleration, (Vector3){0, 0, -1}), 1 / R);
     double end_time = start_time + Vector3Length(initial_velocity) / (mu_roll * g);
-    PathSegment segment = {initial_position, initial_velocity, acceleration, initial_angular_velocity, angular_acceleration, true, start_time, end_time};
+    PathSegment segment = {initial_position, initial_velocity, acceleration, initial_angular_velocity, angular_acceleration, true, start_time, end_time, NULL};
     add_segment(&(ball->path), segment);
 }
 
@@ -530,7 +530,7 @@ void resolve_stop(Ball *ball, double time)
 {
     PathSegment *segment = &(ball->path.segments[ball->path.num_segments - 1]);
     Vector3 p = get_position(*segment, segment->end_time);
-    PathSegment stop_segment = {p, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, false, time, INFINITY};
+    PathSegment stop_segment = {p, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, false, time, INFINITY, NULL};
     add_segment(&(ball->path), stop_segment);
 }
 
@@ -617,17 +617,14 @@ bool update_path(Game *game)
     }
     if (update_type == BALL_BALL_COLLISION)
     {
-        printf("Collision between ball %d and ball %d\n", ball1->id, ball2->id);
         resolve_ball_ball_collision(ball1, ball2, first_time, game->scene.coefficients);
     }
     else if (update_type == BALL_CUSHION_COLLISION)
     {
-        printf("Collision between ball %d and cushion\n", ball1->id);
         resolve_ball_cushion_collision(ball1, cushion, first_time, game->scene.coefficients);
     }
     else if (update_type == BALL_POCKETED)
     {
-        printf("Ball %d pocketed\n", ball1->id);
         resolve_ball_pocket_collision(ball1, pocket, first_time, game->scene.coefficients);
     }
     else if (update_type == BALL_ROLL)
@@ -648,6 +645,39 @@ bool update_path(Game *game)
     return true;
 }
 
+void add_orientation_to_path(Game *game)
+{
+    for (int i = 0; i < game->scene.ball_set.num_balls; i++)
+    {
+        Ball *ball = &(game->scene.ball_set.balls[i]);
+        for (int j = 0; j < ball->path.num_segments; j++)
+        {
+            PathSegment *segment = &(ball->path.segments[j]);
+            segment->orientations = malloc(100 * sizeof(Quaternion));
+            if (j == 0)
+            {
+                segment->orientations[0] = ball->initial_orientation;
+            }
+            else
+            {
+                segment->orientations[0] = ball->path.segments[j - 1].orientations[99];
+            }
+            double dt = (segment->end_time - segment->start_time) / 99;
+            for (int k = 1; k < 100; k++)
+            {
+                // change orientation according to angular velocity
+                Vector3 w = get_angular_velocity(*segment, segment->start_time + k * dt);
+                Quaternion orientation = segment->orientations[k - 1];
+                Vector3 axis = Vector3Normalize(w);
+                double angle = Vector3Length(w) * dt;
+
+                Quaternion delta = QuaternionFromAxisAngle(axis, -angle);
+                segment->orientations[k] = QuaternionMultiply(orientation, delta);
+            }
+        }
+    }
+}
+
 void generate_paths(Game *game, Ball *ball, Vector3 initial_position, Vector3 initial_velocity, Vector3 initial_angular_velocity, double start_time)
 {
     for (int i = 0; i < game->scene.ball_set.num_balls; i++)
@@ -657,7 +687,7 @@ void generate_paths(Game *game, Ball *ball, Vector3 initial_position, Vector3 in
         {
             continue;
         }
-        PathSegment segment = {current_ball->initial_position, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, false, 0, INFINITY};
+        PathSegment segment = {current_ball->initial_position, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, false, 0, INFINITY, NULL};
         add_segment(&(current_ball->path), segment);
     }
     double mu_slide = game->scene.coefficients.mu_slide;
@@ -670,10 +700,11 @@ void generate_paths(Game *game, Ball *ball, Vector3 initial_position, Vector3 in
     Vector3 angular_acceleration = Vector3Scale(Vector3CrossProduct(acceleration, (Vector3){0, 0, -1}), -2.5 / R);
 
     end_time = start_time + 2 * Vector3Length(contact_point_v) / (7 * mu_slide * g);
-    PathSegment segment = {initial_position, initial_velocity, acceleration, initial_angular_velocity, angular_acceleration, false, start_time, end_time};
+    PathSegment segment = {initial_position, initial_velocity, acceleration, initial_angular_velocity, angular_acceleration, false, start_time, end_time, NULL};
     add_segment(&(ball->path), segment);
     while (update_path(game))
         ;
+    add_orientation_to_path(game);
 }
 
 void render_path_segment(PathSegment segment)
@@ -821,6 +852,8 @@ BallSet standard_ball_set()
         Ball ball;
         ball.id = i;
         ball.initial_position = (Vector3){1, 1 + 0.2 * i, 0};
+        Quaternion q = QuaternionFromEuler(PI / 4, 0, 0);
+        ball.initial_orientation = q;
         ball.radius = 0.05;
         ball.mass = 0.16;
         ball.path = new_path();
@@ -889,6 +922,26 @@ Vector3 get_ball_position(Ball ball, double time)
         }
     }
     return ball.initial_position;
+}
+
+Quaternion get_orientation(PathSegment segment, double time)
+{
+    double dt = (segment.end_time - segment.start_time) / 99;
+    int index = (int)((time - segment.start_time) / dt);
+    return segment.orientations[index];
+}
+
+Quaternion get_ball_orientation(Ball ball, double time)
+{
+    for (int i = 0; i < ball.path.num_segments; i++)
+    {
+        PathSegment segment = ball.path.segments[i];
+        if (time >= segment.start_time && time < segment.end_time)
+        {
+            return get_orientation(segment, time);
+        }
+    }
+    return ball.initial_orientation;
 }
 
 Table create_table()
@@ -1054,7 +1107,6 @@ bool apply_game_rules(Game *game)
 
 void generate_shot(Game *game, Vector3 velocity, Vector3 angular_velocity)
 {
-    printf("Generating shot\n");
     Ball *cue_ball = &(game->scene.ball_set.balls[0]);
     game->current_shot.num_events = 0;
     generate_paths(game, cue_ball, cue_ball->initial_position, velocity, angular_velocity, 0);
@@ -1283,6 +1335,7 @@ void update_game(Game *game)
         {
             Ball *ball = &(game->scene.ball_set.balls[i]);
             ball->initial_position = get_ball_position(*ball, game->time);
+            ball->initial_orientation = get_ball_orientation(*ball, game->time);
             ball->path.num_segments = 0;
         }
         clear_paths(&(game->scene));
@@ -1293,8 +1346,48 @@ void update_game(Game *game)
 
 void render_ball(Ball ball, double time)
 {
-    Vector3 position = world_to_screen(get_ball_position(ball, time));
-    DrawCircle(position.x, position.y, meters_to_pixels(ball.radius), ball.colour);
+    Vector3 position = (get_ball_position(ball, time));
+    Vector3 screen_position = world_to_screen(position);
+    DrawCircle(screen_position.x, screen_position.y, meters_to_pixels(ball.radius), ball.colour);
+    // Draw spots on ball according to orientation
+    // Convert quaternion to unit vectors
+
+    Matrix m = QuaternionToMatrix(get_ball_orientation(ball, time));
+    // Get unit vectors from matrix
+    Vector3 x = {m.m0, m.m4, m.m8};
+    Vector3 y = {m.m1, m.m5, m.m9};
+    Vector3 z = {m.m2, m.m6, m.m10};
+    Vector3 p1 = Vector3Add(position, Vector3Scale(x, ball.radius));
+    Vector3 p2 = Vector3Add(position, Vector3Scale(y, ball.radius));
+    Vector3 p3 = Vector3Add(position, Vector3Scale(z, ball.radius));
+    Vector3 p4 = Vector3Subtract(position, Vector3Scale(x, ball.radius));
+    Vector3 p5 = Vector3Subtract(position, Vector3Scale(y, ball.radius));
+    Vector3 p6 = Vector3Subtract(position, Vector3Scale(z, ball.radius));
+
+    if (p1.z > 0)
+    {
+        DrawCircle(world_to_screen(p1).x, world_to_screen(p1).y, 2, BLACK);
+    }
+    else
+    {
+        DrawCircle(world_to_screen(p4).x, world_to_screen(p4).y, 2, BLACK);
+    }
+    if (p2.z > 0)
+    {
+        DrawCircle(world_to_screen(p2).x, world_to_screen(p2).y, 2, BLACK);
+    }
+    else
+    {
+        DrawCircle(world_to_screen(p5).x, world_to_screen(p5).y, 2, BLACK);
+    }
+    if (p3.z > 0)
+    {
+        DrawCircle(world_to_screen(p3).x, world_to_screen(p3).y, 2, BLACK);
+    }
+    else
+    {
+        DrawCircle(world_to_screen(p6).x, world_to_screen(p6).y, 2, BLACK);
+    }
     render_path(ball.path);
 }
 
